@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OriginX - NOT YOUR KEYS, NOT YOUR COINS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;900&display=swap" rel="stylesheet">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        html, body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            touch-action: manipulation;
+        }
+
+        body {
+            font-family: 'Inter', 'Helvetica Neue', sans-serif;
+            background: url('./originx-bg.png') no-repeat center center fixed;
+            background-size: cover;
+            color: #FFFFFF;
+            position: relative;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+        }
+
+        /* Dark Overlay for Text Readability */
+        body::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.3);
+            z-index: 1;
+        }
+
+        /* Main Container */
+        .container {
+            position: relative;
+            z-index: 2;
+            height: 100vh;
+        }
+
+        /* Bottom Links */
+        .bottom-links {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 3;
+        }
+
+        .bottom-links a:not(.x-icon) {
+            color: #000000;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 400;
+            transition: font-weight 0.3s ease;
+            white-space: nowrap;
+            padding: 5px 0;
+        }
+
+        .bottom-links a:not(.x-icon):hover {
+            font-weight: 900;
+        }
+
+        .bottom-links .separator {
+            color: #000000;
+            font-size: 0.9rem;
+            font-weight: 400;
+        }
+
+        /* X Icon */
+        .x-icon {
+            margin-top: 10px;
+            transition: opacity 0.3s ease;
+            display: inline-block;
+        }
+
+        .x-icon img {
+            width: 30px;
+            height: 30px;
+            display: block;
+            margin: 0 auto;
+        }
+
+        .x-icon:hover {
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+    </div>
+
+    <nav class="bottom-links">
+        <div style="text-align: center;">
+            <div style="margin-bottom: 10px;">
+                <a href="https://btchouse.kr" target="_blank">Bitcoin House Origin</a>
+                <span class="separator">|</span>
+                <a href="https://bitcoinseoul.kr" target="_blank">Bitcoin Seoul</a>
+                <span class="separator">|</span>
+                <a href="https://discord.com/invite/gfWYEFkDPd" target="_blank">CITADEL Community</a>
+            </div>
+            <a href="https://x.com/originxBTC?s=20" target="_blank" class="x-icon">
+                <img src="./x-bg.png" alt="X">
+            </a>
+        </div>
+    </nav>
+</body>
+</html>
