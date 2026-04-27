@@ -1,0 +1,1587 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1" />
+<title>Bitcoin 2026 Las Vegas — 동선 대시보드</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<style>
+  :root { color-scheme: dark; }
+  html, body { background: #0a0a0a; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Inter", "Pretendard", "Noto Sans KR", sans-serif; -webkit-tap-highlight-color: transparent; }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .chk { appearance: none; width: 22px; height: 22px; border: 2px solid #3f3f46; border-radius: 6px; background: transparent; cursor: pointer; flex-shrink: 0; transition: all .15s; }
+  .chk:checked { background: #f7931a; border-color: #f7931a; }
+  .chk:checked::after { content: "✓"; color: #0a0a0a; font-weight: 900; font-size: 14px; display: flex; align-items: center; justify-content: center; height: 100%; }
+  .glow { box-shadow: 0 0 0 1px rgba(247,147,26,.4), 0 8px 32px rgba(247,147,26,.15); }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .slide-up { animation: slideUp .25s ease-out; }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0); }
+  .star-card-2 { background: linear-gradient(180deg, rgba(247,147,26,.05) 0%, rgba(247,147,26,0) 50%); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+const STAGES = {
+  "Nakamoto":              { color: "#3b82f6", short: "Nakamoto",  loc: "Expo Hall 중앙 후면" },
+  "Enterprise (BFC)":      { color: "#10b981", short: "Enterprise",loc: "Enterprise Hall (우측)" },
+  "Genesis":               { color: "#a855f7", short: "Genesis",   loc: "Expo Hall 좌측" },
+  "Energy":                { color: "#f59e0b", short: "Energy",    loc: "중앙 (Main Entrance 근처)" },
+  "HRF Freedom Go Up":     { color: "#ec4899", short: "HRF",       loc: "중앙 소형 스테이지" },
+  "Workshop & 101":        { color: "#f97316", short: "Workshop",  loc: "우측 (101 & Workshop Area)" },
+  "Open Source":           { color: "#ef4444", short: "OpenSrc",   loc: "Conference Rooms (최우측)" },
+  "Deep VIP Lounge":       { color: "#6366f1", short: "Deep VIP",  loc: "Whale VIP 구역 (최우측)" },
+  "Bitcoin Mag News Desk": { color: "#06b6d4", short: "News Desk", loc: "Nakamoto 인접" },
+  "Satoshi Podcast":       { color: "#84cc16", short: "Satoshi",   loc: "Expo 좌측" },
+};
+
+const WALK_RAW = {
+  "Nakamoto|Enterprise (BFC)": 4, "Nakamoto|Genesis": 4, "Nakamoto|Energy": 3, "Nakamoto|HRF Freedom Go Up": 3,
+  "Nakamoto|Workshop & 101": 6, "Nakamoto|Open Source": 7, "Nakamoto|Deep VIP Lounge": 6,
+  "Nakamoto|Bitcoin Mag News Desk": 1, "Nakamoto|Satoshi Podcast": 4,
+  "Genesis|Energy": 4, "Genesis|Enterprise (BFC)": 6, "Genesis|HRF Freedom Go Up": 4, "Genesis|Workshop & 101": 8,
+  "Genesis|Open Source": 9, "Genesis|Deep VIP Lounge": 9, "Genesis|Satoshi Podcast": 2, "Genesis|Bitcoin Mag News Desk": 4,
+  "Energy|Enterprise (BFC)": 2, "Energy|HRF Freedom Go Up": 2, "Energy|Workshop & 101": 5,
+  "Energy|Open Source": 6, "Energy|Deep VIP Lounge": 5, "Energy|Bitcoin Mag News Desk": 3, "Energy|Satoshi Podcast": 3,
+  "Enterprise (BFC)|HRF Freedom Go Up": 3, "Enterprise (BFC)|Workshop & 101": 3, "Enterprise (BFC)|Open Source": 3,
+  "Enterprise (BFC)|Deep VIP Lounge": 3, "Enterprise (BFC)|Bitcoin Mag News Desk": 4, "Enterprise (BFC)|Satoshi Podcast": 6,
+  "HRF Freedom Go Up|Workshop & 101": 5, "HRF Freedom Go Up|Open Source": 6, "HRF Freedom Go Up|Deep VIP Lounge": 5,
+  "HRF Freedom Go Up|Bitcoin Mag News Desk": 3, "HRF Freedom Go Up|Satoshi Podcast": 3,
+  "Workshop & 101|Open Source": 2, "Workshop & 101|Deep VIP Lounge": 3, "Workshop & 101|Bitcoin Mag News Desk": 6,
+  "Workshop & 101|Satoshi Podcast": 8, "Open Source|Deep VIP Lounge": 3, "Open Source|Bitcoin Mag News Desk": 7,
+  "Open Source|Satoshi Podcast": 9, "Deep VIP Lounge|Bitcoin Mag News Desk": 6, "Deep VIP Lounge|Satoshi Podcast": 9,
+  "Bitcoin Mag News Desk|Satoshi Podcast": 4,
+};
+function walkMin(a, b) { if (a === b) return 0; return WALK_RAW[`${a}|${b}`] ?? WALK_RAW[`${b}|${a}`] ?? 5; }
+
+const TAGS = {
+  headliner: { emoji: "🔥", label: "메인 키노트", color: "bg-red-500/20 text-red-300 border-red-500/40" },
+  korean:    { emoji: "🇰🇷", label: "한국 관련", color: "bg-blue-500/20 text-blue-300 border-blue-500/40" },
+  asia:      { emoji: "🌏", label: "아시아",     color: "bg-emerald-500/20 text-emerald-300 border-emerald-500/40" },
+  policy:    { emoji: "🏛️", label: "정책",       color: "bg-amber-500/20 text-amber-300 border-amber-500/40" },
+  treasury:  { emoji: "💼", label: "트레저리",   color: "bg-purple-500/20 text-purple-300 border-purple-500/40" },
+  lending:   { emoji: "💰", label: "금융/대출",  color: "bg-yellow-500/20 text-yellow-300 border-yellow-500/40" },
+  hrf:       { emoji: "🤝", label: "HRF/인권",   color: "bg-pink-500/20 text-pink-300 border-pink-500/40" },
+  mining:    { emoji: "⚡", label: "마이닝",     color: "bg-orange-500/20 text-orange-300 border-orange-500/40" },
+  security:  { emoji: "🔐", label: "보안/커스터디", color: "bg-cyan-500/20 text-cyan-300 border-cyan-500/40" },
+  edu:       { emoji: "🎓", label: "교육/문화",  color: "bg-lime-500/20 text-lime-300 border-lime-500/40" },
+  general:   { emoji: "⚪", label: "일반",       color: "bg-zinc-500/20 text-zinc-300 border-zinc-500/40" },
+};
+
+// star: 0(없음) | 1(중요 담론) | 2(분수령급)
+const SESSIONS = [
+  { id:"d1-1", day:1, start:"09:00", end:"09:02", stage:"Enterprise (BFC)", star:0,
+    titleKo:"오프닝 리마크 (BFC)", titleEn:"Opening Remarks",
+    speakers:"George Mekhail (BFC, BTC Inc MD)", tags:["general"] },
+
+  { id:"d1-2", day:1, start:"09:00", end:"09:05", stage:"Nakamoto", star:0,
+    titleKo:"개회식: 미국 국가 연주", titleEn:"Opening Ceremony: National Anthem",
+    speakers:"Snow ❄️", tags:["general"] },
+
+  { id:"d1-3", day:1, start:"09:04", end:"09:25", stage:"Enterprise (BFC)", star:1,
+    titleKo:"2026 비트코인 센티먼트 리포트", titleEn:"2026 Sentiment Report",
+    speakers:"Mason Foard (Meliuz, Mod) · Nuri Chang (BitGo) · Gui Gomes (OranjeBTC) · Dylan LeClair (Metaplanet)",
+    tags:["asia","treasury"],
+    note:"비트코인 트레저리 컴퍼니(BTCTC)가 2025–26년 기관 비트코인의 핵심 구조로 자리잡으면서, 화두는 \"보유 여부\"에서 \"어떤 자본구조로 보유할 것인가\"로 이동했다. Metaplanet(일본 상장)·OranjeBTC(LATAM 최대)·BitGo(커스터디)가 글로벌 BTCTC 풍경을 진단." },
+
+  { id:"d1-4", day:1, start:"09:05", end:"09:30", stage:"Nakamoto", star:1,
+    titleKo:"오프닝 리마크 (David Bailey)", titleEn:"Opening Remarks",
+    speakers:"David Bailey (Nakamoto Inc CEO, BTC Inc Founder)", tags:["headliner","policy"],
+    note:"Nakamoto Inc은 KindlyMD와의 역합병으로 상장한 순수 BTC 트레저리 기업 — 디지털 자산 역사상 최대급 PIPE 자금 조달. 순수 BTC 트레저리 비히클이 공개시장의 새로운 자산 클래스로 정착하는 과정의 상징적 인물." },
+
+  { id:"d1-5", day:1, start:"09:05", end:"09:30", stage:"Genesis", star:0,
+    titleKo:"비트코인과 절대적 재산권 (스페인어 세션)", titleEn:"Derechos de Propiedad Absolutos con Bitcoin",
+    speakers:"Jethro Toro (Mod) · Álvaro D. María · Alessandro Cecere (Luxor) · Clara García Prieto (BTL)",
+    tags:["lending"],
+    note:"비트코인을 약한 재산권 체제(LATAM, 자본통제 국가)에 대한 해법으로 보는 히스패닉계 오스트리아학파 프레임. 인플레·자본통제 경험에서 출발하는 BTC 정당화 담론." },
+
+  { id:"d1-6", day:1, start:"09:27", end:"09:48", stage:"Enterprise (BFC)", star:1,
+    titleKo:"정부 관계: 은행과 비트코인 입법", titleEn:"Government Relations: Banking & Bitcoin Legislation",
+    speakers:"Stephen Pollock (Mod) · Garry Krugljakow (Aifinyo 독일) · Khing Oei (Treasury 네덜란드) · John Riggins (Moon Inc HK)",
+    tags:["asia","policy","treasury"],
+    note:"Operation Choke Point 2.0 이후 BTC 기업의 은행 접근권 문제. 독일·네덜란드·홍콩 상장 BTCTC가 본국 규제·은행 인프라 격차를 어떻게 헤쳐나가는지의 실무 담론." },
+
+  { id:"d1-7", day:1, start:"09:30", end:"10:00", stage:"Nakamoto", star:2,
+    titleKo:"자가수탁의 권리는 침해될 수 없다", titleEn:"The Right to Self-Custody Shall Not Be Infringed",
+    speakers:"Grant McCarty (BPI, Mod) · Joe Kelly (Unchained) · Nick Begich (의원) · Zach Herbert (Foundation)",
+    tags:["policy","security"],
+    note:"2025–26년 비트코인 정책에서 가장 첨예한 시민 자유 이슈. Samourai Wallet 기소·Tornado Cash 판례 이후, 자가수탁이 수정헌법 제2조 같은 권리로 격상될 수 있는가. 하드웨어 지갑 제조사 + 멀티시그 커스터디 + 현직 의원 + BPI 싱크탱크가 모이는 '셀프 커스터디 = 시민권' 담론의 중심." },
+
+  { id:"d1-8", day:1, start:"09:30", end:"10:00", stage:"Genesis", star:0,
+    titleKo:"비트코인으로 의료 시스템 고치기", titleEn:"Fixing The Healthcare System With Bitcoin",
+    speakers:"Avik Roy (Strive, Mod) · Andy Schoonover (CrowdHealth) · Jon Gordon (SOUND HSA)", tags:["general"],
+    note:"비트코인의 교환수단(MoE) 활용을 보험·의료비 결제에 적용하는 시도. CrowdHealth·SOUND HSA가 대표 사례. '비트코인이 망가진 시장을 고칠 수 있는가'의 응용 담론." },
+
+  { id:"d1-9", day:1, start:"10:00", end:"10:05", stage:"Nakamoto", star:1,
+    titleKo:"MARA", titleEn:"MARA",
+    speakers:"Fred Thiel (MARA Chairman/CEO)", tags:["mining"],
+    note:"세계 최대 상장 마이너의 5분 발표. AI 워크로드 전환이 핵심 스토리 — 비트코인 마이너가 HPC/AI 컴퓨트 인프라로 피벗하는 2026년 마이닝 산업의 전환점." },
+
+  { id:"d1-10", day:1, start:"10:00", end:"10:30", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"Claws and Coffee (AI 에이전트 모임)", titleEn:"Claws and Coffee",
+    speakers:"Justin Moon (HRF AI Tech Lead, Mod)", tags:["hrf","korean"],
+    note:"AI 에이전트가 비트코인/라이트닝으로 자율 결제하는 시연 모임. 'AI 에이전트 경제는 무허가 결제 레일을 필요로 하고, 비트코인이 그 자연스러운 답'이라는 사이퍼펑크 × AI 교차 담론." },
+
+  { id:"d1-11", day:1, start:"10:00", end:"10:30", stage:"Genesis", star:0,
+    titleKo:"현장에서 배우는 보안 교훈", titleEn:"Lessons in Security From Those in The Know",
+    speakers:"Justine Bone (Crypto ISAC, Mod) · Garret Kelly (Robinhood) · Erik Kellogg (BinanceUS)", tags:["security"],
+    note:"거래소·커스터디 보안 실무. 크립토가 금융 인프라로 성숙하면서 산업급 사이버 보안 표준이 자리 잡는 과정." },
+
+  { id:"d1-12", day:1, start:"10:05", end:"10:20", stage:"Nakamoto", star:1,
+    titleKo:"키노트: Arthur Hayes", titleEn:"Keynote: Arthur Hayes",
+    speakers:"Arthur Hayes (Maelstrom CIO, BitMEX 공동창업)", tags:["headliner","asia"],
+    note:"Hayes의 매크로 프레임(글로벌 유동성 사이클, 아시아 피아트 붕괴 시나리오)은 헤지펀드의 BTC 포지셔닝을 좌우한다. 그의 월간 뉴스레터는 기관 비트코인 사고의 주요 입력값. '비트코인을 글로벌 유동성 사이클 안에서 보는 매크로 프레임워크'의 정전(canon)." },
+
+  { id:"d1-13", day:1, start:"10:12", end:"10:15", stage:"Enterprise (BFC)", star:0,
+    titleKo:"쇼케이스: LQWD", titleEn:"Showcase: LQWD",
+    speakers:"Shone Anstey (LQWD Tech CEO)", tags:["mining"],
+    note:"TSX 상장 라이트닝 인프라 기업. 라이트닝 네트워크의 기관·결제 상용화가 본격화되는 단계의 사례." },
+
+  { id:"d1-14", day:1, start:"10:15", end:"10:30", stage:"Energy", star:0,
+    titleKo:"발표: Bitcoin Merch", titleEn:"Announcement: Bitcoin Merch",
+    speakers:"Idan Abada (Bitcoin Merch CEO)", tags:["general"] },
+
+  { id:"d1-15", day:1, start:"10:17", end:"10:20", stage:"Enterprise (BFC)", star:0,
+    titleKo:"쇼케이스: XCE", titleEn:"Showcase: XCE",
+    speakers:"Scott Ellam (XCE CEO)", tags:["treasury"],
+    note:"비트코인 본위 글로벌 임원 헤드헌팅 회사. 영업 현금흐름 + BTC 트레저리 결합 모델 — BTCTC가 단순 BTC 보유에서 '운영사업 + BTC 축적' 하이브리드로 진화하는 사례." },
+
+  { id:"d1-16", day:1, start:"10:20", end:"10:30", stage:"Nakamoto", star:2,
+    titleKo:"키노트: Cynthia Lummis 상원의원", titleEn:"Keynote: Senator Cynthia Lummis",
+    speakers:"Cynthia Lummis (US Senate, 'Crypto Queen')", tags:["headliner","policy"],
+    note:"미국 디지털 자산 입법의 설계자. Lummis-Gillibrand 법안(첫 초당적 크립토 규제 프레임워크), GENIUS Act(스테이블코인 첫 연방법), BITCOIN Act(100만 BTC 전략비축). 전략적 비트코인 비축(SBR) + 종합 규제 클래리티 — 미국의 비트코인 포지션을 정의하는 인물." },
+
+  { id:"d1-17", day:1, start:"10:22", end:"10:43", stage:"Enterprise (BFC)", star:1,
+    titleKo:"비트코인 담보 대출로 사업 확장하기", titleEn:"Scaling Operations via Bitcoin-Backed Lending",
+    speakers:"Wyatt O'Rourke (Mod) · Himanshu Sahay (Arch Lending) · Jason Twu (Avalon Labs) · Hunter Albright (SALT)",
+    tags:["lending"],
+    note:"Arch Lending이 BTC 기업 최초의 CLO 구조로 7천만 달러 조달. Avalon Labs는 31억 달러 대출 처리 + USDa(BTC 담보 스테이블코인) 발행. '팔지 마라, 빌려라(borrow, never sell)' 명제의 상품화 — 비트코인 금융화의 핵심 축." },
+
+  { id:"d1-18", day:1, start:"10:30", end:"11:00", stage:"Genesis", star:0,
+    titleKo:"비트코인 전공: 고등교육 커리큘럼 설계", titleEn:"Majoring in Bitcoin: Designing a Curriculum",
+    speakers:"Kristyna Mazankova (BTC Inc/Hesperides U) · Korok Ray (Texas A&M) · Ella Hough (Strategy/MicroStrategy) · Sal Pineda (BPI)",
+    tags:["edu"],
+    note:"Texas A&M의 Bitcoin 전공 강의(Korok Ray), Hesperides 대학 Bitcoin 석사 과정, Cornell Bitcoin Club. 비트코인의 학계 정당성 진입 — 세대 교체의 신호." },
+
+  { id:"d1-19", day:1, start:"10:30", end:"11:00", stage:"Workshop & 101", star:0,
+    titleKo:"CISA 제안 (서명 집계 프로토콜 업그레이드)", titleEn:"CISA Proposal",
+    speakers:"Fabian Jahr (Brink, Bitcoin Core dev)", tags:["security"],
+    note:"Cross-Input Signature Aggregation. Schnorr/Taproot 기반 첫 완전 스펙 + PoC. 5년 만에 다시 살아난 CISA 논의 — 트랜잭션 효율과 프라이버시 향상의 차세대 후보." },
+
+  { id:"d1-20", day:1, start:"10:30", end:"11:00", stage:"Energy", star:0,
+    titleKo:"비트코인과 신흥시장 에너지 경제의 부상", titleEn:"Bitcoin & Emerging Market Energy Economies",
+    speakers:"Susie Violet Ward (Bitcoin Policy UK) · Timo Steipe (MIM) · Alessandro Cecere (Luxor) · Daniel Jonsson (MGMT)",
+    tags:["mining"],
+    note:"신흥시장(아프리카·LATAM)의 좌초 에너지 화폐화 도구로서의 마이닝. '마이닝 = 에너지가 풍부하지만 자본이 부족한 국가의 인프라'라는 최후의 에너지 구매자(buyer of last resort) 내러티브." },
+
+  { id:"d1-21", day:1, start:"10:30", end:"11:00", stage:"Deep VIP Lounge", star:1,
+    titleKo:"엔드게임: 인플레이션, 디플레이션, 아니면 둘 다? (VIP)", titleEn:"The Endgame: Inflation, Deflation, or Both?",
+    speakers:"Arthur Hayes (Maelstrom) · Brent Johnson (Santiago Capital)", tags:["headliner","asia"],
+    note:"VIP 한정. Hayes(글로벌 유동성)와 Brent Johnson('달러 밀크셰이크 이론' 창시자)의 두 매크로 프레임이 정면충돌. 피아트 시스템의 종말 시나리오 — 인플레이션이 먼저인가 디플레이션이 먼저인가의 거시 논쟁." },
+
+  { id:"d1-22", day:1, start:"10:30", end:"11:00", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"화폐의 미래: 비트코인 vs CBDC", titleEn:"The Future of Money: Bitcoin vs. CBDCs",
+    speakers:"Roger Huang ('Would Mao Hold Bitcoin' 저자) · Frank Corva (Fedi)", tags:["asia","policy"],
+    note:"비트코인 vs 중앙은행 디지털화폐(CBDC)의 양립 불가 프레임. Roger Huang의 책은 중국 CBDC와 BTC를 비교한다. '디지털 시대의 화폐는 누가 통제하는가 — 시민이냐 국가냐'의 정치철학적 담론." },
+
+  { id:"d1-23", day:1, start:"10:30", end:"11:00", stage:"Nakamoto", star:2,
+    titleKo:"코드는 표현의 자유다: 비트코인을 향한 전쟁의 종식", titleEn:"Code is Free Speech: Ending the War on Bitcoin",
+    speakers:"Paul Grewal (Coinbase CLO, Mod) · Kash Patel (FBI 국장) · Todd Blanche (DoJ 부장관)",
+    tags:["headliner","policy"],
+    note:"FBI 국장 + 법무부 부장관 + Coinbase CLO가 한 무대에 오른다. 코드 = 표현의 자유(Bernstein v. US 판례 적용). 트럼프 행정부가 오픈소스 개발자 기소·Choke Point 2.0의 종료를 시그널하는 결정적 순간 — Bitcoin 정책 담론의 분수령." },
+
+  { id:"d1-24", day:1, start:"10:45", end:"11:06", stage:"Enterprise (BFC)", star:0,
+    titleKo:"자본 조달 전략", titleEn:"Capital Raising Strategies",
+    speakers:"Brian Dixon (Off the Chain, Mod) · Alexandre Laizet (Capital B 유럽) · Yves Choueifaty (Tobam) · Jonathan Ovadia (OVEX 아프리카)",
+    tags:["treasury"],
+    note:"Capital B(유럽 첫 BTC 트레저리), Tobam(BTC 양적 자산운용), OVEX(아프리카 최대 거래소)의 자본 조달 전략. 글로벌 BTCTC가 BTC 축적 전략을 어떻게 자본시장으로 자금화하는가의 실무." },
+
+  { id:"d1-25", day:1, start:"11:00", end:"11:30", stage:"Workshop & 101", star:0,
+    titleKo:"금고에서 네트워크로: 비트코인 커스터디 다시 생각하기", titleEn:"From Vaults to Networks: Rethinking Bitcoin Custody",
+    speakers:"Buck Perley", tags:["security"],
+    note:"멀티시그·디스크립터·PSBT를 단순 보안 도구가 아닌 '새로운 금융 관계의 빌딩블록'으로 재정의. 비트코인 커스터디 프리미티브가 핫/콜드 저장을 넘어 새로운 금융 상품 카테고리를 가능하게 한다는 담론." },
+
+  { id:"d1-26", day:1, start:"11:00", end:"11:30", stage:"Genesis", star:0,
+    titleKo:"비트코인 시대의 주권적 개인", titleEn:"The Sovereign Individual in the Bitcoin Era",
+    speakers:"Katie The Russian (CitizenX) · Jennifer Harding-Marlin (JH Marlin Law) · Michelle Weekley (Byte Federal)",
+    tags:["lending"],
+    note:"Davidson/Rees-Mogg의 1997년 책 '주권적 개인'의 BTC 시대 갱신. Plan B 여권, 이중 시민권, 관할 차익. '피아트 붕괴 대비책으로서의 관할권 차익거래'라는 비트코이너 가족의 주권 전략 담론." },
+
+  { id:"d1-27", day:1, start:"11:00", end:"11:20", stage:"Nakamoto", star:1,
+    titleKo:"파이어사이드: CFTC 의장 Mike Selig", titleEn:"Fireside: CFTC Chairman Mike Selig",
+    speakers:"Gregory Xethalis (Multicoin/Nakamoto, Mod) · Mike Selig (CFTC 의장)", tags:["headliner","policy"],
+    note:"신임 CFTC 의장의 첫 등판. 비트코인 무기한 선물 규제가 핵심 — 미국이 디지털 자산 파생상품 시장을 주도할 것인가. SEC·CFTC 이중 리더십 하의 BTC 파생상품 정책. 미국이 글로벌 파생상품 시장 점유율을 두고 경쟁하는 전선." },
+
+  { id:"d1-28", day:1, start:"11:00", end:"12:00", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"비트코인 정책으로 인권 수호하기", titleEn:"Defending Human Rights through Bitcoin Policy",
+    speakers:"Grant McCarty (BPI Executive Director)", tags:["hrf","policy"],
+    note:"HRF + BPI의 정책 교차점. '비트코인 = 자유의 기술'이라는 내러티브가 인권 옹호와 미국 정책 작업으로 수렴하는 흐름." },
+
+  { id:"d1-29", day:1, start:"11:00", end:"11:30", stage:"Energy", star:1,
+    titleKo:"해시레이트 하락, 호스티드 마이닝이 빈자리를 채우는가?", titleEn:"Hashrate is Dropping, Is Hosted Mining Picking Up the Slack?",
+    speakers:"Anthony Power (Mod) · Charley Brady (BitFuFu) · Shreyash Milak (ValueHash) · Michal Beno (OneMiners)",
+    tags:["mining"],
+    note:"6년 만에 처음으로 글로벌 해시레이트 하락. 상장 마이너들이 AI 워크로드로 전환하면서 자체 마이닝 경제성이 약화. '상장 마이너가 AI로 떠난 자리를 누가 채워 네트워크 분산성을 유지할 것인가'의 마이닝 중앙화 논쟁." },
+
+  { id:"d1-30", day:1, start:"11:20", end:"11:40", stage:"Nakamoto", star:1,
+    titleKo:"파이어사이드: SEC 의장 Paul Atkins", titleEn:"Fireside: SEC Chairman Paul Atkins",
+    speakers:"Perianne Boring (Digital Chamber, Mod) · Paul Atkins (SEC 의장)", tags:["headliner","policy"],
+    note:"SEC 의장 + Digital Chamber. 'Regulation by enforcement(집행 일변도 규제)' 시대의 종료. Atkins 체제 하의 SEC 입장 — 디지털 자산 증권에 대한 명확한 프레임워크 — 산업 친화 시대의 시작점." },
+
+  { id:"d1-31", day:1, start:"11:30", end:"12:00", stage:"Genesis", star:0,
+    titleKo:"주(州) 단위 비트코인 정책의 영향력", titleEn:"Making Impacts in Bitcoin Policy at the State Level",
+    speakers:"Dom Bei (Mod) · Dan Hersey (RIBPI) · Colin Crossman (와이오밍 부장관) · Dana Criswell", tags:["policy"],
+    note:"주 단위 BTC 정책. 와이오밍 SBR, 산타모니카 소방관 노조 BTC, 로드아일랜드 BPI, 미시시피. '연방이 느릴 때 주(州) 단위 실험실 접근' — 상향식 BTC 정책 모델." },
+
+  { id:"d1-32", day:1, start:"11:30", end:"12:00", stage:"Energy", star:0,
+    titleKo:"비트코인 마이닝 세무 전략 최적화", titleEn:"Maximizing Your Bitcoin Mining Tax Strategy",
+    speakers:"Rob Massey (Deloitte Global Crypto Tax) · Danny Condon (Blockware) · Jeffrey Li (FinTax)",
+    tags:["mining","lending"],
+    note:"Deloitte 글로벌 크립토 세무 리더 진행. 마이닝 세무 컴플라이언스 — 카우보이 시대에서 기업화 시대로의 산업 성숙." },
+
+  { id:"d1-33", day:1, start:"11:30", end:"12:15", stage:"Workshop & 101", star:0,
+    titleKo:"프롬프트에서 결제까지: AI 에이전트 × 비트코인 라이트닝", titleEn:"From Prompt to Payment: AI Agents x Bitcoin Lightning",
+    speakers:"Roland Bewick (Alby Lead Dev)", tags:["general"],
+    note:"AI 에이전트가 BTC/Lightning으로 자율 결제. Alby의 NWC. 'AI 에이전트 경제는 네이티브 디지털 머니가 필요하고, BTC/Lightning이 그 레일'이라는 담론의 데모." },
+
+  { id:"d1-34", day:1, start:"11:40", end:"12:00", stage:"Nakamoto", star:1,
+    titleKo:"파이어사이드: Kalshi (예측 시장)", titleEn:"Fireside: Kalshi",
+    speakers:"Brandon Green (BTC Inc CEO) · Tarek Mansour (Kalshi CEO)", tags:["headliner"],
+    note:"Kalshi는 CFTC 규제 이벤트 컨트랙트('event contracts')를 새로운 금융 자산 클래스로 정착시켰다. 예측 시장이 금융 프리미티브로 정상화되는 단계 — 사용자가 이벤트의 수동적 관찰자에서 능동적 참여자로 전환되는 행동 변화." },
+
+  { id:"d1-35", day:1, start:"12:00", end:"12:05", stage:"Nakamoto", star:1,
+    titleKo:"Aven: 매도(賣渡)의 종말", titleEn:"Aven: The End of Selling",
+    speakers:"Sisun Lee (Aven Head of Crypto, 한국계)", tags:["korean","headliner","lending"],
+    note:"Aven은 BTC 담보 신용카드. '절대 팔지 않는다(never sell)' 명제의 소비자 상품화 — 비트코인 금융화의 정점에서 BTC를 일상 신용으로 전환하는 시도." },
+
+  { id:"d1-36", day:1, start:"12:00", end:"12:30", stage:"Deep VIP Lounge", star:0,
+    titleKo:"허가 없는 돈: Roya Mahboob의 이야기 (VIP)", titleEn:"Money Without Permission: Roya Mahboob's Story",
+    speakers:"Alex Gladstein (HRF CSO, Mod) · Roya Mahboob (Digital Citizen Fund)", tags:["hrf"],
+    note:"VIP 한정. HRF Alex Gladstein + 아프가니스탄 첫 여성 테크 CEO. 비트코인의 가장 강력한 실증 사례 — 권위주의 체제에서 여성의 금융 자율성. 정책·인권·기술이 만나는 지점." },
+
+  { id:"d1-37", day:1, start:"12:00", end:"12:30", stage:"Energy", star:0,
+    titleKo:"뜨거운 컴퓨트의 시대를 식히다: AI, 비트코인, 액침냉각", titleEn:"Keeping Your Cool: AI, Bitcoin & Liquid Cooling",
+    speakers:"Jaran Mellerud (E2C) · Jeremy Singer (ExxonMobil) · Suelyn Wang (창저우 빙루이 中) · Matthew Carson (Hash House)",
+    tags:["mining","asia"],
+    note:"HPC/마이닝 액침냉각. ExxonMobil HPC 책임자, 중국 냉각 기업. 마이닝 ↔ AI 인프라 융합 — 냉각이 운영 제약이자 경쟁 우위로 부상." },
+
+  { id:"d1-38", day:1, start:"12:00", end:"12:30", stage:"Genesis", star:0,
+    titleKo:"단순한 플렙(pleb) 그 이상: 비트코인 문화의 진화", titleEn:"More than Just Plebs: The Evolution of Bitcoin Culture",
+    speakers:"Avi Burra (NosFabrica) · Thomas Pacchia (PubKey) · Matt Kita (Axiom) · American HODL", tags:["edu"],
+    note:"PubKey(NYC BTC 커뮤니티 바), Axiom, American HODL이 비트코인 문화의 진화를 논한다. 'pleb' 밈 시대에서 기관 빌더 시대로 — 비트코인의 정체성 재정의 담론." },
+
+  { id:"d1-39", day:1, start:"12:00", end:"13:00", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"Vibe Coding Live (라이브 AI 코딩)", titleEn:"Vibe Coding Live",
+    speakers:"Justin Moon (HRF)", tags:["hrf","korean"],
+    note:"Justin Moon이 라이브로 AI 활용 비트코인 개발 시연. AI 보조 비트코인 개발 — 'vibe coding'이라는 새로운 개발 패러다임이 빌더 컬처에 미치는 영향." },
+
+  { id:"d1-40", day:1, start:"12:05", end:"12:30", stage:"Nakamoto", star:1,
+    titleKo:"비트코인의 발목을 잡는 정책들 고치기", titleEn:"Fixing the Policies Holding Bitcoin Back",
+    speakers:"Cody Carbone (Digital Chamber, Mod) · Kara Calvert (Coinbase) · Jayson Browder (MARA) · Janessa Lopez (Block Inc) · Dennis Porter (Satoshi Action)",
+    tags:["policy"],
+    note:"Coinbase, MARA, Block(Square)의 정책 책임자 + Satoshi Action Dennis Porter. DC에서의 산업 정책 통합 — 크립토·비트코인 로비의 결집 담론." },
+
+  { id:"d1-41", day:1, start:"12:15", end:"13:00", stage:"Workshop & 101", star:0,
+    titleKo:"MDK: 비트코인 마이닝의 오픈소스 기반", titleEn:"MDK: Open-Source Foundation for Bitcoin Mining",
+    speakers:"Gio Galt (Tether)", tags:["mining"],
+    note:"Tether의 오픈소스 마이닝 스택(Mining Development Kit). 벤더 락인에 대한 해독제로서의 오픈소스 마이닝 인프라 — Tether가 USDT 발행자에서 비트코인 인프라 플레이어로 부상하는 시그널." },
+
+  { id:"d1-42", day:1, start:"12:30", end:"13:00", stage:"Energy", star:0,
+    titleKo:"비트코인 마이닝 생태계 오픈소싱", titleEn:"Open-Sourcing the Bitcoin Mining Ecosystem",
+    speakers:"Tyler Stevens (Exergy) · Michael Schmid (256 Foundation) · Ryan Kuester · Skot (Bitaxe)",
+    tags:["mining"],
+    note:"256 Foundation, Bitaxe — DIY 마이닝 운동. Tyler Stevens의 'Bitcoin Mining Heat Reuse'. 오픈 하드웨어를 통한 마이닝 분산화 — Bitaxe 무브먼트의 '시민 마이너' 부활 담론." },
+
+  { id:"d1-43", day:1, start:"12:30", end:"13:00", stage:"Nakamoto", star:2,
+    titleKo:"정책 명확성은 오는가?", titleEn:"Are We Getting More Clarity?",
+    speakers:"Miles Jennings (a16z crypto, Mod) · Cynthia Lummis (상원의원) · Bernie Moreno (상원의원) · Patrick Witt (백악관) · Sam Kazemian (Frax)",
+    tags:["headliner","policy"],
+    note:"상원의원 2명 + 백악관 디지털자산 자문위 사무국장 + a16z 정책 책임자 + Frax. 미국 비트코인 정책 클라리티 — 상원 + 백악관이 프레임워크에 수렴하는 자리. 향후 4년의 정책 환경을 정의하는 패널." },
+
+  // ═══════════════════════════ DAY 2 — 4월 28일 화요일 ═══════════════════════════
+  { id:"d2-1", day:2, start:"10:00", end:"10:15", stage:"Nakamoto", star:0,
+    titleKo:"발표: Block (Square)", titleEn:"Announcement: Block",
+    speakers:"Miles Suter (Block, Bitcoin Product Lead)", tags:["lending"],
+    note:"Jack Dorsey의 Block(구 Square)이 Cash App·Bitkey·Proto를 통해 BTC 결제 인프라를 확장하는 단계. 가맹점이 수수료 없이 비트코인을 받을 수 있게 만든 행보가 핵심." },
+
+  { id:"d2-2", day:2, start:"10:00", end:"10:30", stage:"Genesis", star:0,
+    titleKo:"오렌지 필 U: 친구를 비트코인에 입문시키기", titleEn:"Orange Pill U: Hazing Your Classmates with Bitcoin",
+    speakers:"Madison Hanson (HansonHash) · Nicki Sharma (Orange Peel Podcast) · Braeden Ruddock (BTC Inc) · Halston Valencia (Bitcoin Well)",
+    tags:["edu"],
+    note:"오렌지필링(orange-pilling) — 비트코인 전도의 문화적 메타. 'Origin Academy 같은 비트코인 입문 프로그램이 어떻게 일반인을 변화시키는가'의 풀뿌리 교육 담론." },
+
+  { id:"d2-3", day:2, start:"10:00", end:"10:30", stage:"Enterprise (BFC)", star:1,
+    titleKo:"채널을 통한 수익화: 라이트닝 네트워크 비즈니스화", titleEn:"Channeling Interest: How Companies Are Monetizing the Lightning Network",
+    speakers:"Graham Krizek (Voltage, Mod) · Tyler Wood (Block) · Jesse Shrader (Amboss) · Shone Anstey (LQWD)",
+    tags:["lending"],
+    note:"라이트닝 네트워크가 '결제 인프라 실험'에서 '수익형 비즈니스 레이어'로 전환되는 단계. Voltage·Amboss·LQWD가 라이트닝 노드 운영·라우팅을 어떻게 상품화하는지의 상업화 담론." },
+
+  { id:"d2-4", day:2, start:"10:00", end:"10:30", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"Claws and Coffee (Day 2)", titleEn:"Claws and Coffee",
+    speakers:"Justin Moon (HRF AI Tech Lead)", tags:["hrf","korean"],
+    note:"HRF Justin Moon의 매일 아침 AI 에이전트 ✕ 비트코인 데모 모임. AI 에이전트와 비트코인의 일상화." },
+
+  { id:"d2-5", day:2, start:"10:15", end:"10:20", stage:"Nakamoto", star:0,
+    titleKo:"BTC Sessions 10주년", titleEn:"10 Years of BTC Sessions",
+    speakers:"BTC Sessions (Educator)", tags:["edu"],
+    note:"북미 비트코인 교육 채널의 10주년. '비트코인 교육이 단순 콘텐츠에서 산업이 되었다'는 회고 — 비트코인 교육 시장 성숙의 상징." },
+
+  { id:"d2-6", day:2, start:"10:15", end:"10:30", stage:"Energy", star:0,
+    titleKo:"DATUM: 자체 비용을 회수하는 마이닝 업그레이드", titleEn:"DATUM: The Mining Upgrade that Pays for Itself",
+    speakers:"Jason Hughes (OCEAN, VP)", tags:["mining"],
+    note:"OCEAN 풀의 DATUM 프로토콜 — 마이너가 자체 블록 템플릿을 만들어 풀이 거래 검열할 수 없게 만드는 기술. 마이닝 분산화의 기술적 실증." },
+
+  { id:"d2-7", day:2, start:"10:20", end:"10:30", stage:"Nakamoto", star:2,
+    titleKo:"중앙은행 외환보유고를 비트코인으로 다각화하기", titleEn:"Diversifying Central Bank Reserves with Bitcoin",
+    speakers:"Aleš Michl (체코 국립은행 총재)", tags:["headliner","policy","asia"],
+    note:"체코 중앙은행 총재의 직접 발언. EU 회원국 중앙은행 총재가 Bitcoin Conference 무대에 오르는 것은 사상 최초 — '비트코인이 G20급 중앙은행 외환보유고로 진입하는가'의 분수령. SBR(미국 전략비축)이 대형 정치 어젠다라면 이건 통화정책 어젠다." },
+
+  { id:"d2-8", day:2, start:"10:30", end:"11:00", stage:"Genesis", star:1,
+    titleKo:"인플레이션 함정: 화폐 발행의 윤리학", titleEn:"The Inflation Trap: The Ethics of Money Creation",
+    speakers:"James Poulos (FAI, Mod) · Guido Hülsmann (Mises Institute) · Avik Roy (Strive) · Hector Alvero (Rhino Bitcoin)",
+    tags:["edu"],
+    note:"미제스 연구소(오스트리아학파의 본산) Hülsmann + 'Bitcoin과 미국 재정의 결산' 저자 Avik Roy. '인플레이션은 단지 경제 현상이 아니라 윤리적 약탈'이라는 비트코인 철학의 학문적 기초." },
+
+  { id:"d2-9", day:2, start:"10:30", end:"11:00", stage:"Energy", star:0,
+    titleKo:"전략적 마이닝: 에너지 변동성을 경쟁력으로", titleEn:"Strategic Mining: Embracing Energy Volatility as the Competitive Advantage",
+    speakers:"John Paul Baric (Mod) · Scooter Womack (Vega Energy) · Nick Hansen (Luxor) · David Chernis (CPower)",
+    tags:["mining"],
+    note:"마이닝이 단순 해시 생산이 아닌 '에너지 시장의 수요 반응 자원(demand response)'으로 진화. 그리드 안정화 + 마이닝 수익을 결합한 차세대 비즈니스 모델." },
+
+  { id:"d2-10", day:2, start:"10:30", end:"11:00", stage:"Nakamoto", star:0,
+    titleKo:"통제의 경쟁우위: 액션 스포츠와 비트코인", titleEn:"Competitive Edge of Control: Action Sports & Bitcoin",
+    speakers:"Justin Dorey (前 올림픽 프리스키어, Luxor, Mod) · Danielle Moinet (WWE) · Cris Cyborg (UFC 챔피언) · Kenny Florian (UFC)",
+    tags:["edu"],
+    note:"UFC 챔피언 Cris Cyborg + Kenny Florian + WWE 레슬러. '재무적 자기주권(self-custody) = 신체적 자기주권' 메타포 — 운동선수가 비트코인을 자기 몸의 통제권 연장으로 받아들이는 문화 수렴." },
+
+  { id:"d2-11", day:2, start:"10:30", end:"11:00", stage:"Enterprise (BFC)", star:0,
+    titleKo:"주권적 이커머스 결제와 플랫폼", titleEn:"Sovereign E-Commerce Payments & Platforms",
+    speakers:"Rockstar Dev (BTCPayServer, Mod) · Evan Kaloudis (ZEUS) · Keith Gardner (Branta) · calvadev (Shopstr Markets)",
+    tags:["lending"],
+    note:"BTCPayServer·ZEUS·Shopstr가 'Stripe 없는 이커머스' — 무허가 결제 인프라를 구축하는 흐름. 결제 처리사의 검열·차단 위험에서 벗어나는 것이 사이퍼펑크 결제 담론의 실용화." },
+
+  { id:"d2-12", day:2, start:"10:30", end:"11:00", stage:"HRF Freedom Go Up", star:1,
+    titleKo:"인권으로서의 금융 자유", titleEn:"Financial Freedom as a Human Right",
+    speakers:"Alex Gladstein (HRF) · Srdja Popovic (CANVAS) · Anaïse Kanimba (Africa Bitcoin Institute) · Evan Mawarire (활동가)",
+    tags:["hrf","policy"],
+    note:"세르비아 무혈혁명 설계자 Srdja Popovic + 르완다 대학살 생존자 가족 Anaïse Kanimba + 짐바브웨 활동가. '비트코인 = 권위주의 저항의 도구'의 가장 강력한 사례 모음 — HRF 그랜티의 살아있는 증언." },
+
+  { id:"d2-13", day:2, start:"11:00", end:"11:15", stage:"Nakamoto", star:1,
+    titleKo:"우리는 더 많은 카지노를 짓기 위해 화폐를 고치는 게 아니다", titleEn:"We're Not Fixing Money to Build More Casinos",
+    speakers:"Alex Leishman (River, CEO)", tags:["headliner"],
+    note:"River CEO의 메시지 — 비트코인 산업이 카지노화(투기적 알트코인·예측시장) 되는 흐름에 대한 경고. 'Bitcoin only' 진영이 'crypto'와 자기를 구분 짓는 정체성 담론." },
+
+  { id:"d2-14", day:2, start:"11:00", end:"11:30", stage:"Enterprise (BFC)", star:1,
+    titleKo:"비트코인 중심의 포트폴리오 구성과 금융상품", titleEn:"Portfolio Construction & Financial Products with Bitcoin at the Core",
+    speakers:"Tim Savage (Ion Strategies, Mod) · Dhruv Patel (Arch Lending) · Sam Konigsberg (BlackRock) · Bisher Khudeira (Stormrake)",
+    tags:["treasury","lending"],
+    note:"BlackRock 디렉터가 자리한다. 세계 최대 자산운용사가 BTC IBIT(현물 ETF) 이후 어떻게 비트코인 중심 포트폴리오 상품을 설계하는가 — 기관 자본의 BTC 배분 표준화." },
+
+  { id:"d2-15", day:2, start:"11:00", end:"11:30", stage:"Energy", star:0,
+    titleKo:"해시레이트에서 의회까지: 마이너의 정치 참여", titleEn:"From Hashrate to Hill: Why Miners Should Engage in Public Policy",
+    speakers:"Kyle Schneps (DCG) · Filip Primec (NiceHash) · John Paul Baric (Aurum)", tags:["mining","policy"],
+    note:"마이너가 단순 운영자에서 정치적 행위자로 — Texas·Wyoming 정책 영향력. 마이닝 산업의 로비 자원이 비트코인 정책 형성의 핵심 축으로 부상." },
+
+  { id:"d2-16", day:2, start:"11:00", end:"11:30", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"비트코인 채택: 첫 사용에서 일상으로", titleEn:"Bitcoin Adoption: From First Use to Everyday Reality",
+    speakers:"Win Ko Ko Aung (HRF Global Adoption) · Jimmy Kostro (Bitcoin Chiang Mai) · Brianna Honkawa d'Estries (Evento) · Isabella Santos (BTC Isla)",
+    tags:["hrf","asia"],
+    note:"치앙마이·콜롬비아·아프가니스탄 등의 현장 채택 사례. 비트코인이 '투자 자산'이 아니라 '일상 화폐'로 쓰이는 비서구권 현실 — 한국 시장에는 거의 보이지 않는 풀뿌리 경제권 형성." },
+
+  { id:"d2-17", day:2, start:"11:15", end:"11:30", stage:"Nakamoto", star:1,
+    titleKo:"글로벌 어카운트", titleEn:"The Global Account",
+    speakers:"David Marcus (Lightspark CEO, 前 Meta/Libra 책임자)", tags:["headliner","lending"],
+    note:"前 Facebook의 Libra(스테이블코인 프로젝트, 결국 좌초) 책임자가 라이트닝 인프라 회사 Lightspark CEO로. 'Libra는 실패했지만 비트코인 라이트닝이 그 비전을 실현한다' — 빅테크 결제 야망의 비트코인 흡수." },
+
+  { id:"d2-18", day:2, start:"11:30", end:"12:00", stage:"Enterprise (BFC)", star:1,
+    titleKo:"그리고 그들이 너희와 싸우면: 무시당하던 시기에서 적대받는 시기로", titleEn:"Then They Fight You: From Ignored to Opposed, Where Bitcoin Is Now",
+    speakers:"Hailey Lennon (Mod) · Chris Lane (前 Silvergate Bank CTO) · Emily Kapur (Quinn Emanuel) · Jonathan Melton (Unchained)",
+    tags:["lending","policy"],
+    note:"제목은 간디의 명언 'They ignore you, they laugh at you, they fight you, you win'의 차용. Silvergate 붕괴 이후의 BTC 은행권 — Operation Choke Point 2.0이 어떻게 산업을 형성했는지의 회고와 다음 단계." },
+
+  { id:"d2-19", day:2, start:"11:30", end:"11:45", stage:"Nakamoto", star:0,
+    titleKo:"영구 비트코인 머신으로 개인 트레저리 구축하기", titleEn:"Building a Personal Treasury with a Perpetual Bitcoin Machine",
+    speakers:"Mark Moss (Market Disruptors)", tags:["treasury"],
+    note:"BTCTC 모델의 개인화 — 개인이 본인 자산을 '비트코인 본위 회사'처럼 운영하는 프레임. 가족 자산의 비트코인 표준화 담론." },
+
+  { id:"d2-20", day:2, start:"11:30", end:"12:10", stage:"Energy", star:0,
+    titleKo:"해시레이트 군비경쟁: Softwar 세계의 충돌", titleEn:"The Hashrate Arms Race: Conflict in a Softwar World",
+    speakers:"Ken Egan (BPI, Mod) · Ben Kincaid (ReElement Africa) · Jacob Langenkamp (Bridger) · Kyle Schneps (DCG)",
+    tags:["mining","policy"],
+    note:"Jason Lowery의 'Softwar' 명제(비트코인 = 디지털 동력 투사) 적용. 미·중 해시레이트 경쟁이 국가 안보 자산화되는 단계 — 마이닝 = 지정학." },
+
+  { id:"d2-21", day:2, start:"11:45", end:"12:15", stage:"Nakamoto", star:1,
+    titleKo:"글로벌 불확실성 속에서 비트코인은 어떻게 움직일까?", titleEn:"How Will Bitcoin Behave with Global Uncertainty?",
+    speakers:"Natalie Brunell (Mod) · Danielle DiMartino Booth (QI Research) · Joseph Wang (Fedguy) · Matt Hougan (Bitwise CIO)",
+    tags:["headliner"],
+    note:"Bitwise CIO + 前 Fed 분석가 + 매크로 분석가. '비트코인이 위험자산인가 안전자산인가' — 2024–26년 글로벌 매크로 환경에서 BTC의 행동 분석. 기관 투자자의 핵심 관심사." },
+
+  { id:"d2-22", day:2, start:"12:00", end:"12:30", stage:"Enterprise (BFC)", star:0,
+    titleKo:"세금 1099-DA: 알아두어야 할 모든 것", titleEn:"Taxes 1099-DA: What You Need to Know",
+    speakers:"Sasha Hodder (Mod) · Andrew Gordon (Gordon Law) · Jordan Guess (Bitment) · Vick Bathija (Commerce CPA)",
+    tags:["lending"],
+    note:"미국 IRS의 새 세무 양식 1099-DA가 2025년부터 시행. 거래소·커스터디언이 보고 의무를 지는 디지털 자산 세무 인프라가 자리 잡는 단계." },
+
+  { id:"d2-23", day:2, start:"12:00", end:"12:30", stage:"Open Source", star:1,
+    titleKo:"중앙화 위험: 자금, 권력, 비트코인의 클라이언트 다양성 문제", titleEn:"Centralization Risks: Funding, Power & Bitcoin's Client Diversity Problem",
+    speakers:"Thomas Pacchia (PubKey, Mod) · Eric Voskuil (Libbitcoin) · Jon Atack (Bitcoin Core BIPs) · Eric Lombrozo",
+    tags:["security"],
+    note:"Bitcoin Core 개발자 + Libbitcoin 메인테이너. 'Core 개발자의 자금이 소수 단체(Brink, Spiral)에 집중됐다'는 자금 집중 우려 — 프로토콜의 검열 저항성을 위해 다양한 클라이언트 구현이 필요한가의 논쟁." },
+
+  { id:"d2-24", day:2, start:"12:15", end:"13:00", stage:"Nakamoto", star:2,
+    titleKo:"기술이 민주주의를 낡게 만들고 있는가?", titleEn:"Is Technology Making Democracy Obsolete?",
+    speakers:"David Zell (BPI, Mod) · Curtis Yarvin (Urban Tiger) · Mike Brock",
+    tags:["headliner","policy"],
+    note:"Curtis Yarvin은 '신반동(neoreaction)'의 지적 설계자. 실리콘밸리 사상가들 사이에서 영향력이 큰 인물 — '민주주의보다 효율적인 통치 형태가 가능한가' 논쟁의 중심. 비트코인 커뮤니티의 정치철학적 분기점 — 가장 격렬한 논쟁이 예상되는 세션." },
+
+  { id:"d2-25", day:2, start:"12:30", end:"13:00", stage:"Enterprise (BFC)", star:1,
+    titleKo:"비트코인과 디지털 자산이 내장된 뱅킹", titleEn:"Banking with Bitcoin & Digital Assets Built-In",
+    speakers:"Brian Hirschfield (Mod) · Igor Istratov (Fifth Third Bank) · Andrew Begin (Galoy) · Miles Paschini (FV Bank)",
+    tags:["lending","treasury"],
+    note:"Fifth Third Bank(미국 13위 은행)의 디지털 자산 책임자가 자리. 전통 대형 은행이 BTC를 단순 보관이 아닌 '내장 서비스'로 통합하는 단계 — Choke Point 2.0의 종료가 가져올 은행 인프라 변화의 실증." },
+
+  { id:"d2-26", day:2, start:"13:00", end:"13:30", stage:"Workshop & 101", star:0,
+    titleKo:"상속: 만약 오늘 죽는다면 가족이 당신의 비트코인에 접근할 수 있는가?", titleEn:"Inheritance: Could Your Family Access Your Bitcoin if You Died Today?",
+    speakers:"Nathan Fitzsimmons (BTC Sessions VP)", tags:["security","edu"],
+    note:"비트코인 상속 — 라이언이 4월 17일에 한국에서 다룬 바로 그 주제. 멀티시그·디스크립터·종이 백업·신탁 구조의 실무 가이드. 글로벌에서도 가장 시급한 BTC 사용자 페인포인트." },
+
+  { id:"d2-27", day:2, start:"13:30", end:"14:00", stage:"Nakamoto", star:0,
+    titleKo:"비트코인 위에 새 금융 시스템 구축하기", titleEn:"Building the Next Financial System on Bitcoin",
+    speakers:"Nolan Bauerle (RoxomTV, Mod) · Johann Kerbrat (Robinhood Crypto SVP) · Jody Mettler (BitGo Trust COO) · Paget Stanco (Gemini)",
+    tags:["lending"],
+    note:"Robinhood + BitGo + Gemini가 한 자리에. '비트코인이 새 금융 시스템의 결제 레이어'라는 명제 — 인터넷이 미디어를 흡수했듯 비트코인이 금융 인프라를 흡수하는 과정." },
+
+  { id:"d2-28", day:2, start:"14:00", end:"14:30", stage:"Nakamoto", star:1,
+    titleKo:"글로벌 비트코인 기업들은 어떻게 정렬하는가", titleEn:"How Bitcoin Companies Are Aligning Globally",
+    speakers:"George Mekhail (BFC, Mod) · David Bailey (Nakamoto Inc) · Alexandre Laizet (Capital B 유럽) · Dylan LeClair (Metaplanet 일본)",
+    tags:["headliner","treasury","asia"],
+    note:"BTCTC 글로벌 정렬 — Nakamoto Inc(미국) + Capital B(유럽) + Metaplanet(일본). 각 지역 BTCTC가 어떻게 자본·전략을 공유하며 글로벌 운동을 형성하는가. 한국 BTCTC는 아직 이 자리에 없다 — 라이언의 ORIGIN SEOUL이 메울 공백." },
+
+  { id:"d2-29", day:2, start:"14:30", end:"14:40", stage:"Nakamoto", star:0,
+    titleKo:"발표 (BTC Inc)", titleEn:"Announcement",
+    speakers:"Brandon Green (BTC Inc CEO)", tags:["general"],
+    note:"BTC Inc CEO의 새 발표 — 통상 컨퍼런스·미디어 확장 또는 Bitcoin Magazine 신상품 발표가 예상." },
+
+  { id:"d2-30", day:2, start:"14:40", end:"15:15", stage:"Nakamoto", star:2,
+    titleKo:"키노트: Michael Saylor", titleEn:"Keynote: Michael Saylor",
+    speakers:"Michael Saylor (Strategy 창업자/Executive Chairman)", tags:["headliner","treasury"],
+    note:"비트코인 코퍼레이트 어돕션의 가장 영향력 있는 인물. Strategy(舊 MicroStrategy)는 700,000+ BTC 보유 — $60B+ 가치. Saylor의 한 마디는 BTCTC 전체의 자본 전략에 영향. 그가 만든 'borrow-to-buy' 모델은 현재 글로벌 BTCTC의 정전. Bitcoin 2026의 가장 핵심적인 30분." },
+
+  { id:"d2-31", day:2, start:"15:15", end:"15:45", stage:"Nakamoto", star:1,
+    titleKo:"인권 최전선의 비트코인", titleEn:"Bitcoin on the Frontlines of Human Rights",
+    speakers:"Alex Gladstein (HRF CSO) · Evan Mawarire (짐바브웨 활동가) · Srdja Popovic (CANVAS) · Anaïse Kanimba (Africa Bitcoin Institute)",
+    tags:["headliner","hrf"],
+    note:"HRF 인권 진영의 핵심 인사. Saylor 키노트 직후 HRF가 비트코인의 윤리적 정당성을 메인 무대에서 재확인 — 'BTC = 자유의 도구'라는 내러티브가 자본주의 성공 서사 옆에서 균형을 잡는다." },
+
+  { id:"d2-32", day:2, start:"15:30", end:"16:00", stage:"Deep VIP Lounge", star:1,
+    titleKo:"Michael Saylor Q&A (VIP)", titleEn:"Michael Saylor Q&A",
+    speakers:"Carly Benson (BTC Inc VIP, Mod) · Michael Saylor", tags:["headliner","treasury"],
+    note:"VIP 한정. 키노트 직후 Whale 청중과의 비공개 Q&A. Saylor와 직접 대화할 수 있는 거의 유일한 자리 — 글로벌 BTCTC founder들이 1:1 질문할 수 있는 공간." },
+
+  { id:"d2-33", day:2, start:"15:35", end:"16:00", stage:"Enterprise (BFC)", star:2,
+    titleKo:"성공적인 비트코인 트레저리 컴퍼니의 조건은?", titleEn:"What Makes a Bitcoin Treasury Company Successful?",
+    speakers:"Jason Fang (Sora Ventures, Mod) · Paul Lee (BitPlanet 대표) · Amanda Fabiano (Nakamoto Inc COO)",
+    tags:["headliner","treasury","asia","korean"],
+    note:"한국 BitPlanet 대표 Paul Lee가 글로벌 BTCTC 무대에 선다. Sora Ventures(아시아 BTCTC 펀드) + Nakamoto Inc(미국 대표). 라이언이 ORIGIN SEOUL 타이틀 파트너십을 추진 중인 그 BitPlanet — 한국 BTCTC의 글로벌 데뷔 무대." },
+
+  { id:"d2-34", day:2, start:"16:00", end:"17:00", stage:"HRF Freedom Go Up", star:1,
+    titleKo:"Matt Odell과 친구들", titleEn:"Matt Odell and Friends",
+    speakers:"Matt Odell (Ten31/OpenSats) · Marty Bent (TFTC/Ten31) · Danny Knowles (What Bitcoin Did) · Alex Gladstein (HRF)",
+    tags:["headliner","hrf"],
+    note:"Bitcoin-only 진영 4대 미디어/투자자. Ten31(BTC 전용 VC)·OpenSats(개발자 후원)·TFTC·What Bitcoin Did가 모인다. '비트코이너의 비트코이너에 의한 비트코이너를 위한' 라운드테이블 — 운동의 자기 정의 시간." },
+
+  { id:"d2-35", day:2, start:"16:15", end:"16:40", stage:"Nakamoto", star:2,
+    titleKo:"키노트: Tether (Paolo Ardoino)", titleEn:"Keynote: Tether",
+    speakers:"Paolo Ardoino (Tether CEO)", tags:["headliner","mining"],
+    note:"Tether(USDT 발행자, $130B+ 시총)는 단순 스테이블코인 발행자가 아니라 비트코인 채굴·인프라의 거대 투자자로 부상. MDK 오픈소스 마이닝 + 마이닝 회사 인수 + AI 인프라 투자. '스테이블코인 수익으로 비트코인 인프라를 사들이는' 전략의 정전(canon)." },
+
+  { id:"d2-36", day:2, start:"16:40", end:"16:50", stage:"Nakamoto", star:0,
+    titleKo:"발표: Starknet", titleEn:"Announcement: Starknet",
+    speakers:"Damian Chen (Starknet Foundation, VP Growth)", tags:["general"],
+    note:"Starknet은 이더리움 L2 출신이지만 최근 비트코인 L2 영역 진입을 시도 중. '비트코인 위의 ZK rollup' 가능성 — Bitcoin Maximalist 진영과 충돌 가능한 접근." },
+
+  { id:"d2-37", day:2, start:"17:00", end:"17:30", stage:"Nakamoto", star:2,
+    titleKo:"여러 길, 하나의 자산: 쓰기, 빌리기, 호들?", titleEn:"Multiple Paths, One Asset: Spend, Borrow, or Hodl?",
+    speakers:"Danny Knowles (What Bitcoin Did, Mod) · Miles Suter (Block) · Jack Mallers (Strike CEO/Twenty One CEO)",
+    tags:["headliner","lending"],
+    note:"Jack Mallers가 마무리 패널. 라이언이 4월 27일부터 라스베가스에서 만나려는 핵심 인물 — Strike + Twenty One(공모 BTCTC) 양사 CEO. '비트코인을 어떻게 사용할 것인가'의 정의 — 결제(Block)·대출(Strike)·축적(Twenty One). Bitcoin 2026의 가장 상징적인 마무리." },
+
+  { id:"d2-38", day:2, start:"17:30", end:"18:00", stage:"Nakamoto", star:1,
+    titleKo:"비트코인은 여전히 주권의 도구인가?", titleEn:"Is Bitcoin Still a Sovereign Tool?",
+    speakers:"BTC Sessions (Mod) · Matt Odell (Ten31/OpenSats) · Bruce Fenton (Chainstone Labs) · Luke Rudkowski (We Are Change)",
+    tags:["hrf","security"],
+    note:"Day 2 마지막. ETF·BTCTC·기관 자본의 시대에도 비트코인이 사이퍼펑크 정신을 보존하는가의 자기 점검 — Matt Odell의 일관된 메시지: '본인이 키를 갖지 않으면 비트코인이 아니다'." },
+
+  // ═══════════════════════════ DAY 3 — 4월 29일 수요일 ═══════════════════════════
+  { id:"d3-1", day:3, start:"10:00", end:"10:30", stage:"Nakamoto", star:0,
+    titleKo:"비트코인 개인 재무 전략", titleEn:"Strategies for Bitcoin Personal Finance",
+    speakers:"Brian Harrington (Mod) · Sam (My Financial Friend) · Aaron Arnold (Altcoin Daily) · Austin Arnold (Altcoin Daily)",
+    tags:["edu","lending"],
+    note:"BTC를 개인 재무 계획의 중심에 놓는 실무 — 401(k)·IRA·세금 효율 적립 전략. 'BTC 본위 가계 재무'의 대중화 담론." },
+
+  { id:"d3-2", day:3, start:"10:00", end:"10:30", stage:"Genesis", star:0,
+    titleKo:"비트코인 교육의 네트워크 효과", titleEn:"The Network Effect of Bitcoin Education",
+    speakers:"Matt Mosich (Mod) · Larry Spraker (BTC Isla) · Gabriel Kurman (저자) · Zach Wischler (Casa) · Jimmy Kostro (Bitcoin Chiang Mai)",
+    tags:["edu","asia"],
+    note:"치앙마이·이슬라(메데진)의 풀뿌리 비트코인 교육 모델. 지역 거점 교육이 어떻게 글로벌 채택을 가속하는가 — Origin Academy가 한국에서 추구하는 모델의 글로벌 사례." },
+
+  { id:"d3-3", day:3, start:"10:00", end:"10:30", stage:"Enterprise (BFC)", star:0,
+    titleKo:"기업의 비트코인 여정: 초기 배분자들의 교훈", titleEn:"The Corporate Bitcoin Journey: Lessons from Early Allocators",
+    speakers:"Allen Helm (BFC, Mod) · Brian Consolvo (KPMG) · Rob Massey (Deloitte) · Urban Lavrenčič (NiceHash)",
+    tags:["treasury"],
+    note:"Big 4 회계법인(KPMG·Deloitte) 디지털 자산 책임자가 함께. BTCTC의 회계·감사·세무 표준이 제도권으로 진입하는 단계 — 일반 기업의 BTC 도입 장벽 해체." },
+
+  { id:"d3-4", day:3, start:"10:00", end:"10:30", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"Claws and Coffee (Day 3)", titleEn:"Claws and Coffee",
+    speakers:"Justin Moon (HRF AI Tech Lead)", tags:["hrf","korean"],
+    note:"3일째 매일 아침 모임. 컨퍼런스 마지막날 AI 에이전트 데모와 회고." },
+
+  { id:"d3-5", day:3, start:"10:15", end:"10:30", stage:"Open Source", star:0,
+    titleKo:"L2에 대해 잘못 생각하고 있다: 경제적 vs 기술적 스케일링", titleEn:"You're Wrong About L2s: Economic vs Technical Scaling",
+    speakers:"Red Sheehan (Taproot Wizards)", tags:["security"],
+    note:"Lightning·Liquid·Stacks·Arch 등 BTC L2의 정의 논쟁. '진짜 L2는 무엇인가' — Taproot Wizards의 도발적 관점." },
+
+  { id:"d3-6", day:3, start:"10:15", end:"10:45", stage:"Energy", star:1,
+    titleKo:"비트코인의 뿌리로의 회귀: 가정용 마이닝의 부활", titleEn:"Bitcoin's Return to Its Roots: Why Home Mining is Making a Comeback",
+    speakers:"Tatum Turn Up (Mod) · Aviral Shukla (Altair) · Leo Wang (Canaan) · Skot (256 Foundation/Bitaxe)",
+    tags:["mining"],
+    note:"Bitaxe·Canaan Avalon Mini가 가져온 가정용 마이닝 르네상스. 상장 마이너의 AI 전환 + Bitaxe 무브먼트가 만드는 '시민 마이너 부활' — 마이닝 분산화 담론의 핵심 사례." },
+
+  { id:"d3-7", day:3, start:"10:30", end:"11:00", stage:"Open Source", star:0,
+    titleKo:"프로토콜 vs 플랫폼: Nostr의 SNS 너머 활용", titleEn:"Protocol vs Platform: Nostr's Utility Beyond Social Media",
+    speakers:"Derek Ross (Soapbox, Mod) · David Strayhorn (NosFabrica) · William Casarin (Damus CEO) · Jeff Gardner (White Noise)",
+    tags:["security"],
+    note:"Nostr가 단순 X/트위터 대안이 아닌 ID·결제·메시징 프로토콜로 확장. Damus·Soapbox·White Noise가 만드는 무허가 디지털 인프라." },
+
+  { id:"d3-8", day:3, start:"10:30", end:"11:00", stage:"Enterprise (BFC)", star:0,
+    titleKo:"대차대조표 비트코인 보유의 검증된 전략", titleEn:"Battle-Tested Strategies of Holding Bitcoin on the Balance Sheet",
+    speakers:"Julia Duzon (River COO, Mod) · Di Lewis (BTC Inc CFO) · Leon Johnson (Fedi) · Štěpán Uherík (Trezor CFO)",
+    tags:["treasury"],
+    note:"BTC 트레저리 운영 실무 — 회계 처리, 감사 준비, 손상차손 회계, 헷지 여부. BTCTC가 아닌 일반 기업의 BTC 보유에 대한 가이드." },
+
+  { id:"d3-9", day:3, start:"10:30", end:"11:00", stage:"Nakamoto", star:0,
+    titleKo:"호들에서 집까지: 비트코인 담보 대출과 모기지", titleEn:"From HODL to Home: Bitcoin-Backed Loans Meet Mortgages",
+    speakers:"Leon Wankum (oneVest, Mod) · Hunter Albright (SALT Lending) · CJ Konstantinos (Peoples Reserve)",
+    tags:["lending"],
+    note:"BTC 담보로 부동산 모기지를 받는 흐름 — 'never sell' 명제가 주거 자산까지 확장. 비트코인 금융화가 일상 자산 형성에 침투하는 단계." },
+
+  { id:"d3-10", day:3, start:"10:30", end:"11:30", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"Isabella Santos and Friends", titleEn:"Isabella Santos and Friends",
+    speakers:"Isabella Santos (BTC Isla) · Efrat Fenigson (You're The Voice) · Erik Cason (Vora)", tags:["hrf"],
+    note:"BTC Isla(메데진의 풀뿌리 비트코인 거점) Isabella의 호스팅 패널. LATAM 여성 비트코이너의 시각 — 콜롬비아 마약 경제 잔재와 BTC의 대안 화폐." },
+
+  { id:"d3-11", day:3, start:"10:30", end:"11:00", stage:"Genesis", star:0,
+    titleKo:"비트코인 베이비 만들기: 주권은 자궁에서 시작된다", titleEn:"Making Bitcoin Babies: Sovereignty Starts in the Womb",
+    speakers:"Conor Chepenik (Swan, Mod) · Justine Harper (Sovereign Bitcoin Mama) · Katie The Russian (CitizenX)", tags:["edu"],
+    note:"비트코이너 가족의 자녀 양육 철학 — 출산·홈스쿨·재산권 교육이 주권의 기초라는 프레임. 비트코인 커뮤니티의 라이프스타일 메타." },
+
+  { id:"d3-12", day:3, start:"10:45", end:"11:30", stage:"Workshop & 101", star:0,
+    titleKo:"워크숍: 솔로 마이너", titleEn:"Workshop: Solo Miners",
+    speakers:"WantClue (Bitaxe Lead Developer)", tags:["mining"],
+    note:"Bitaxe 메인 개발자의 직접 워크숍. 가정용 마이너 설치·운영 핸즈온 — 시민 마이닝의 진입 장벽을 제거." },
+
+  { id:"d3-13", day:3, start:"10:45", end:"11:00", stage:"Energy", star:0,
+    titleKo:"해시레이트는 당신이 생각하는 것과 다르다", titleEn:"Hashrate is Not What You Think It Is",
+    speakers:"Mike Segal (Evertas)", tags:["mining"],
+    note:"해시레이트 측정의 통계적 한계 — 실제 보고된 수치와 네트워크 보안의 관계. '해시레이트 = 보안'이라는 단순화에 대한 비판." },
+
+  { id:"d3-14", day:3, start:"11:00", end:"11:15", stage:"Open Source", star:0,
+    titleKo:"비트코인 개발자 생태계", titleEn:"The Bitcoin Developer Ecosystem",
+    speakers:"niftynei (bitcoin++ Founder)", tags:["security","edu"],
+    note:"bitcoin++ 컨퍼런스 시리즈 창립자. 비트코인 코어 개발자 풀이 어떻게 형성되는가 — Brink·Spiral·OpenSats의 자금 + 학회 인프라." },
+
+  { id:"d3-15", day:3, start:"11:00", end:"11:30", stage:"Genesis", star:0,
+    titleKo:"Z세대에서 베이비부머까지: 세대별 비트코인의 의미", titleEn:"Zoomer to Boomer: Why Each Generation Needs Bitcoin",
+    speakers:"Julian Figueroa (Mod) · Mel Sands (The Bitcoin Boomers) · Ben GenZ4BTC · John Drew (BitcoinDay) · Ali Tager (NCA)",
+    tags:["edu"],
+    note:"세대별 비트코인 채택의 차이 — Z세대(투기), 밀레니얼(저축), X세대(인플레이션 헤지), 부머(상속). 세대별 메시징 전략." },
+
+  { id:"d3-16", day:3, start:"11:00", end:"11:15", stage:"Nakamoto", star:1,
+    titleKo:"1조 달러의 다리: 채권시장이 비트코인 신용 혁명을 견인한다", titleEn:"The Trillion-Dollar Bridge: How Bond Markets Will Fuel the Bitcoin Credit Revolution",
+    speakers:"Mauricio Di Bartolomeo (Ledn Co-Founder/CSO) · Adam Reeds (Ledn CEO)",
+    tags:["headliner","lending"],
+    note:"Ledn은 가장 오래된 BTC 담보 대출사 중 하나. '채권시장의 일부가 BTC 담보 대출로 흡수된다'는 명제 — 전통 채권의 마이너스 실질금리 시대에 BTC 담보 대출이 신용시장의 새 카테고리로." },
+
+  { id:"d3-17", day:3, start:"11:00", end:"11:30", stage:"Enterprise (BFC)", star:2,
+    titleKo:"신탁·보험·상속을 통한 비트코인 자산 형성", titleEn:"Building Bitcoin Wealth Through Trusts, Insurance & Inheritance",
+    speakers:"Wyatt O'Rourke (Mod) · Jeff Vandrew Jr (Gannett Trust/Unchained) · Zac Townsend (Meanwhile) · Jake Claver (Digital Ascension Group)",
+    tags:["headliner","lending","security"],
+    note:"라이언이 4월 17일 한국에서 다룬 바로 그 어젠다의 글로벌 정전. Unchained의 Gannett Trust(BTC 전용 신탁회사) + Meanwhile(BTC 본위 생명보험) + Wyatt O'Rourke(Day 1 BTC 대출 패널 모더레이터). 비트코인 상속·신탁 전문 컴퍼니의 결집 — 라이언의 OriginX 포지셔닝에 가장 직접적 컨텍스트." },
+
+  { id:"d3-18", day:3, start:"11:00", end:"11:30", stage:"Energy", star:0,
+    titleKo:"데이터센터 신축 사업의 처음부터", titleEn:"Developing Data Centers from the Ground Up",
+    speakers:"Jaran Mellerud (E2C, Mod) · Glenn Miller (Katten Muchin) · Jay Zapata (Satokie) · Adam Wiggins (Camfil)",
+    tags:["mining"],
+    note:"BTC 마이닝과 AI HPC 통합 데이터센터 신축의 법무·인프라 실무. 2026년 마이닝 회사들이 부동산 디벨로퍼로 변신하는 단계." },
+
+  { id:"d3-19", day:3, start:"11:15", end:"11:50", stage:"Open Source", star:0,
+    titleKo:"Spark & Ark: 차세대 레이어 투", titleEn:"Spark & Ark: The Next Generation of Layer Two",
+    speakers:"Roy Sheinfeld (Breez CEO, Mod) · Ben Carman (Spiral) · Matthew Vuk (Second) · Seth For Privacy (Cake Wallet) · Ethan Marcus (Flashnet)",
+    tags:["security"],
+    note:"Spark(Lightspark의 스택)와 Ark(Lightning 대안 L2)가 라이트닝의 한계를 어떻게 보완하는가. 'Lightning만으로는 부족하다'는 차세대 L2 담론." },
+
+  { id:"d3-20", day:3, start:"11:15", end:"11:25", stage:"Nakamoto", star:0,
+    titleKo:"키노트: Steak 'n Shake", titleEn:"Keynote: Steak 'n Shake",
+    speakers:"Michael Boes (Steak 'n Shake Chief MAHA Officer)", tags:["lending"],
+    note:"미국 햄버거 체인 Steak 'n Shake가 전 매장 BTC 결제 도입 발표. '메인스트림 외식업의 BTC 결제 첫 대규모 사례' — Lightning 결제의 일상화 사례." },
+
+  { id:"d3-21", day:3, start:"11:25", end:"11:40", stage:"Nakamoto", star:0,
+    titleKo:"키노트: Bitmain", titleEn:"Keynote: Bitmain",
+    speakers:"Irene Gao (Bitmain President of Mining)", tags:["mining","asia"],
+    note:"Bitmain은 글로벌 마이닝 ASIC 1위 제조사(중국). 미·중 무역갈등 속에서 Bitmain의 시장 전략 — 마이닝 하드웨어 공급망의 지정학." },
+
+  { id:"d3-22", day:3, start:"11:30", end:"12:10", stage:"Energy", star:0,
+    titleKo:"희소 자산의 배분: 에너지, 컴퓨트, 비트코인", titleEn:"Allocating Scarce Assets: Energy, Compute, & Bitcoin",
+    speakers:"Anthony Power (Mod) · Salman Khan (MARA CFO) · Rory Murray (CleanSpark) · Matt Williams (Luxor)",
+    tags:["mining"],
+    note:"MARA·CleanSpark·Luxor의 CFO들. 에너지·컴퓨트·BTC 보유 사이의 자본 배분 의사결정 — 마이닝 회사가 BTCTC와 AI 인프라 사이에서 어떻게 균형을 잡는가." },
+
+  { id:"d3-23", day:3, start:"11:30", end:"12:00", stage:"Enterprise (BFC)", star:0,
+    titleKo:"비트코인 회사 가치평가법 가르치기", titleEn:"Teaching Private Credit: How to Value Bitcoin Companies",
+    speakers:"Brian Dixon (Off the Chain, Mod) · Jonathan Kirkwood · Scott Marmoll (Capital B Advisory) · Marc Syz (BYZ Partners)",
+    tags:["treasury"],
+    note:"BTCTC와 BTC 회사들의 사모 신용 가치평가 — DCF가 안 통하는 BTC 본위 비즈니스의 평가 방법론. M&A·투자 의사결정의 표준화." },
+
+  { id:"d3-24", day:3, start:"11:30", end:"12:00", stage:"Deep VIP Lounge", star:0,
+    titleKo:"비트코인이 당신을 바꿨는가, 적시에 만났는가? (VIP)", titleEn:"Bitcoin: Did It Change You, or Did You Find It at the Right Time?",
+    speakers:"Carly Benson (Mod) · Paul Keating (primal) · Chef Pete Evans · Richard Byworth (BYZ Partners)", tags:["lending"],
+    note:"VIP 한정. 호주 셰프 Pete Evans + primal Nostr 마스코트. 비트코인이 개인의 정체성에 미치는 변화 — 인생 서사로서의 비트코인 채택." },
+
+  { id:"d3-25", day:3, start:"11:30", end:"12:00", stage:"Genesis", star:0,
+    titleKo:"왜 팟캐스트를 시작해야 하는가", titleEn:"Why You Need to Start a Podcast",
+    speakers:"Dan Webb (Mod) · Staci Costopoulos · Robin Seyr · Paula Iversen", tags:["edu"],
+    note:"비트코인 팟캐스트가 풀뿌리 교육의 핵심 도구로 정착. 한국에는 이 인프라가 거의 없음 — 시장 공백." },
+
+  { id:"d3-26", day:3, start:"11:30", end:"12:00", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"Nostr로 표현의 자유 보호하기", titleEn:"Protecting Free Speech with Nostr",
+    speakers:"Derek Ross (Soapbox) · William Casarin (Damus CEO) · Alex Li (HRF)", tags:["hrf","security"],
+    note:"Nostr가 검열 저항 SNS로 자리잡는 단계. Damus는 iOS App Store에 등재된 첫 Nostr 클라이언트 — 빅테크 게이트키퍼를 우회한 사례." },
+
+  { id:"d3-27", day:3, start:"11:40", end:"12:00", stage:"Nakamoto", star:0,
+    titleKo:"사이퍼펑크 레전드의 시각: 하이퍼비트코인화 = 하이퍼아메리카나이제이션", titleEn:"Through the Eyes of a Cypherpunk Legend: Hyperbitcoinization = HyperAmericanization",
+    speakers:"Paul Rosenberg", tags:["edu","policy"],
+    note:"사이퍼펑크 1세대의 시각 — 비트코인 채택의 글로벌 확산이 결국 미국 자본의 영향력 확장으로 귀결되는가. 사이퍼펑크 운동의 자기 비판." },
+
+  { id:"d3-28", day:3, start:"11:50", end:"12:30", stage:"Open Source", star:0,
+    titleKo:"포스트양자 서명 체계 설명", titleEn:"An Explanation of Post-Quantum Signature Schemes",
+    speakers:"Mike Schmidt (Brink, Mod) · conduition (Independent) · Tadge Dryja (Researcher) · Jonas Nick (Blockstream)",
+    tags:["security"],
+    note:"양자 컴퓨터 위협에 대비한 비트코인 서명 체계 업그레이드 후보들 — Lamport, SPHINCS+, FALCON. Tadge Dryja는 Lightning 백서 공저자." },
+
+  { id:"d3-29", day:3, start:"12:00", end:"12:45", stage:"Workshop & 101", star:0,
+    titleKo:"Spaces 프로토콜: 주권적 비트코인 정체성", titleEn:"Spaces Protocol: Sovereign Bitcoin Identity",
+    speakers:"Andrew Lunde (Lunde Cognitive Effects)", tags:["security"],
+    note:"비트코인 위에 구축된 분산형 도메인 이름 시스템. ENS 같은 이더리움 솔루션의 BTC 버전 — 정체성 인프라가 비트코인으로 이동하는 단계." },
+
+  { id:"d3-30", day:3, start:"12:00", end:"12:30", stage:"Genesis", star:0,
+    titleKo:"필름메이킹으로 비트코인의 부상을 기록하기", titleEn:"Documenting the Rise of Bitcoin Through Filmmaking",
+    speakers:"Isabella Santos (Mod) · Shooter (No More Inflation) · Webworthy (BTCPay/BTC Inc)", tags:["edu"],
+    note:"비트코인 다큐멘터리 영화 산업이 형성 중 — 'No More Inflation' 등 풀뿌리 영상 운동. 비트코인 문화의 미디어 자산화." },
+
+  { id:"d3-31", day:3, start:"12:00", end:"12:30", stage:"Enterprise (BFC)", star:0,
+    titleKo:"유럽의 기업 비트코인: 규제, 도전, 기회", titleEn:"Corporate Bitcoin in Europe: Regulation, Challenges & Opportunities",
+    speakers:"Stefania Barbaglio (Mod) · Carmen Constenla (Vanadi Treasury) · Khing Oei (Treasury) · Scott Ellam (XCE)",
+    tags:["treasury","policy"],
+    note:"유럽 BTCTC들 — Vanadi(스페인), Treasury(네덜란드), XCE(영국). MiCA 규제 하의 유럽 BTC 회사 운영의 실무 — Aifinyo(독일), Capital B(프랑스) 흐름과 연결." },
+
+  { id:"d3-32", day:3, start:"12:00", end:"12:30", stage:"Nakamoto", star:2,
+    titleKo:"미국 해시레이트에서 월스트리트로: 비트코인이 미국에 주는 이익", titleEn:"From American Hashrate to Wall Street: How Bitcoin Benefits the U.S.",
+    speakers:"Eric Balchunas (Bloomberg ETF, Mod) · Eric Trump (American Bitcoin) · John Koudounis (Calamos Investments CEO)",
+    tags:["headliner","policy","mining","treasury"],
+    note:"트럼프 가족(Eric Trump)이 직접 American Bitcoin이라는 마이닝 회사 운영. 정치권력과 비트코인 자본의 융합이 가장 노골적으로 표현되는 자리. Bloomberg ETF 분석가 사회. 'Bitcoin이 미국 외교·산업 정책의 도구로 정착하는가'의 정전." },
+
+  { id:"d3-33", day:3, start:"12:00", end:"12:30", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"AI 시대의 액티비즘", titleEn:"Activism in the Age of AI",
+    speakers:"Justin Moon (HRF) · Farida Nabourema (Katutu Center for Civil Rights)", tags:["hrf"],
+    note:"AI가 권위주의 감시 도구가 되는 시대에 활동가들이 어떻게 비트코인·Nostr·AI를 역으로 활용하는가. Farida는 토고 활동가." },
+
+  { id:"d3-34", day:3, start:"12:10", end:"12:30", stage:"Energy", star:0,
+    titleKo:"마이너 중앙화의 게임이론", titleEn:"The Game Theory Behind Miner Centralization",
+    speakers:"Micah Warren (오리건대 부교수)", tags:["mining"],
+    note:"수학적 게임이론 관점에서 마이닝 풀의 중앙화 경향 분석. '왜 50% 공격이 일어나지 않는가'의 학문적 답변." },
+
+  { id:"d3-35", day:3, start:"12:30", end:"13:00", stage:"Nakamoto", star:1,
+    titleKo:"양자 위협은 얼마나 현실적인가?", titleEn:"How Real is the Quantum Threat?",
+    speakers:"Alex Thorn (Galaxy Head of Research, Mod) · Brandon Black (Rearden Code) · James O'Beirne · Hunter Beast (Anduro) · Alex Pruden (Project Eleven)",
+    tags:["headliner","security"],
+    note:"비트코인 보안의 가장 큰 장기 리스크. Q-Day(양자컴이 ECDSA를 깨는 날)가 5년 후인가 50년 후인가의 시간 지평 논쟁. 비트코인 코어가 포스트양자 소프트포크를 어떻게 준비하는가." },
+
+  { id:"d3-36", day:3, start:"12:30", end:"13:00", stage:"Energy", star:0,
+    titleKo:"마진에서 수익 짜내기: 마이닝의 좌초된 사토시", titleEn:"Squeezing Profit from the Margins: Uncovering Stranded Sats in Mining Operations",
+    speakers:"Nico Smid (Digital Mining Solutions, Mod) · Dan Koehler (ASIC Plug) · Bradley Peak (VNISH) · Alexander Lozben (Interhash)",
+    tags:["mining"],
+    note:"펌웨어 튜닝, ASIC 효율 최적화, 폐열 회수의 실무 — 마이닝 마진 압축 시대의 운영 노하우." },
+
+  { id:"d3-37", day:3, start:"12:30", end:"13:00", stage:"Deep VIP Lounge", star:2,
+    titleKo:"스택 챔프: 동서양의 만남 (VIP)", titleEn:"Stack Champs: East Meets West",
+    speakers:"Natalie Brunell (Mod) · Eric Trump (American Bitcoin) · Simon Gerovich (Metaplanet CEO)",
+    tags:["headliner","treasury","asia"],
+    note:"VIP 한정. 미국(트럼프 가족 American Bitcoin) + 일본(Metaplanet — 아시아 1위 BTCTC, BitPlanet의 일본 카운터파트). 미·아 BTC 자본의 직접 대화 — 한국 BTCTC가 나아가야 할 무대의 가장 압축적 그림." },
+
+  { id:"d3-38", day:3, start:"12:30", end:"13:30", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"비트코인 트랜잭션 핸즈온", titleEn:"Hands-On Bitcoin Transactions",
+    speakers:"niftynei (bitcoin++ Founder)", tags:["edu","security"],
+    note:"BIPs/PSBT/스크립트 직접 만들어보기. 비트코인 코어 개발자가 가르치는 깊은 핸즈온 — 한국 개발자 커뮤니티가 가장 부족한 영역." },
+
+  { id:"d3-39", day:3, start:"12:30", end:"13:00", stage:"Enterprise (BFC)", star:0,
+    titleKo:"주당 비트코인 증가가 진짜 수익률인가?", titleEn:"Is More Bitcoin Per Share \"True\" Yield?",
+    speakers:"Matt Ballensweig (BitGo Prime, Mod) · Alexander Blume (Two Prime) · Richard Byworth (BYZ Partners)",
+    tags:["treasury"],
+    note:"BTCTC가 주식 발행으로 BTC를 늘리는 'BTC per share' 메트릭이 진짜 주주가치인가의 논쟁 — Strategy(MSTR) 모델의 비판적 검증." },
+
+  { id:"d3-40", day:3, start:"12:45", end:"13:15", stage:"Workshop & 101", star:0,
+    titleKo:"ZEUS 지갑 온보딩 워크숍", titleEn:"ZEUS Wallet Onboarding Workshop",
+    speakers:"Evan Kaloudis (ZEUS Founder)", tags:["security"],
+    note:"ZEUS는 자체 노드 운영 가능한 라이트닝 지갑 — 진정한 자가수탁 라이트닝의 표준." },
+
+  { id:"d3-41", day:3, start:"13:00", end:"13:20", stage:"Nakamoto", star:1,
+    titleKo:"노이즈 속에서 시그널 찾기", titleEn:"Finding Signal in a Noisy World",
+    speakers:"Jeff Booth (ego death capital General Partner, 'The Price of Tomorrow' 저자)", tags:["headliner"],
+    note:"Booth의 'The Price of Tomorrow'는 비트코인 디플레이션 가설의 정전. 'AI가 가속하는 디플레이션 + 화폐 인플레이션' 충돌의 결말이 BTC라는 명제." },
+
+  { id:"d3-42", day:3, start:"13:15", end:"14:00", stage:"Workshop & 101", star:0,
+    titleKo:"Vibe Coding으로 비트코인 지갑 만들기", titleEn:"Vibe Coding a Bitcoin Wallet",
+    speakers:"Justin Moon (HRF AI Tech Lead)", tags:["hrf","korean"],
+    note:"AI 코딩 보조로 비트코인 지갑을 처음부터 만드는 라이브 — 비트코인 빌더 진입 장벽 해체. 라이언의 영어 학습 동기와도 연결." },
+
+  { id:"d3-43", day:3, start:"13:20", end:"13:40", stage:"Nakamoto", star:1,
+    titleKo:"자본 배분의 미래는 비트코인이다", titleEn:"The Future of Capital Allocation Is Bitcoin",
+    speakers:"Tyler Evans (UTXO Management CIO, Mod) · Amy Oldenburg (Morgan Stanley Head of Digital Asset Strategy)",
+    tags:["headliner","treasury"],
+    note:"Morgan Stanley의 디지털 자산 전략 책임자 + UTXO Management CIO. 월스트리트가 BTC를 자본 배분의 표준으로 받아들이는 단계 — 25년 전 Morgan Stanley의 'EM 진입' 결정과 비교될 수 있는 순간." },
+
+  { id:"d3-44", day:3, start:"13:30", end:"14:00", stage:"HRF Freedom Go Up", star:1,
+    titleKo:"비트코인에 대한 양자 위협", titleEn:"The Quantum Threat to Bitcoin",
+    speakers:"Alex Li (HRF, Mod) · Tadge Dryja (Researcher) · Brandon Black (Rearden Code) · Casey Rodarmor (Bitcoin Developer)",
+    tags:["headliner","security"],
+    note:"Casey Rodarmor는 Ordinals 창시자, Tadge Dryja는 Lightning 백서 공저자. 양자 위협의 가장 심층적 토론 — d3-35와 paired 세션." },
+
+  { id:"d3-45", day:3, start:"13:40", end:"14:00", stage:"Nakamoto", star:2,
+    titleKo:"비트코인의 기술·금융 인프라 만들기", titleEn:"Creating Bitcoin's Technical & Financial Infrastructure for Maximum Adoption",
+    speakers:"Natalie Brunell (Mod) · Adam Back (Blockstream Co-founder/CEO) · Phong Le (Strategy President/CEO)",
+    tags:["headliner","treasury"],
+    note:"Adam Back은 Hashcash 발명자(비트코인 PoW의 기원, 사토시 후보) + Blockstream CEO. Phong Le는 Strategy(MSTR) President/CEO. 비트코인의 가장 권위 있는 기술 + 자본 인물의 1:1 대화 — 세션 가치 자체가 컨퍼런스 핵심." },
+
+  { id:"d3-46", day:3, start:"14:00", end:"14:30", stage:"Genesis", star:0,
+    titleKo:"비트코인이 코스타리카의 의식적 삶과 만나다", titleEn:"Bitcoin Meets Conscious Living in Costa Rica",
+    speakers:"Paul Keating (Mod) · Ben Ashara (Secret Keys) · Sergio Chaverri (AYA Capital) · Lee Salminen (Bitcoin Jungle)",
+    tags:["edu","hrf"],
+    note:"Bitcoin Jungle(코스타리카 BTC 마을)의 라이프스타일. 비트코이너의 거주지 선택 — 관할권 차익 + 자연 지향." },
+
+  { id:"d3-47", day:3, start:"14:00", end:"14:15", stage:"Open Source", star:0,
+    titleKo:"Bitcoinkernel의 역사와 로드맵", titleEn:"The History & Roadmap of Bitcoinkernel",
+    speakers:"Stephan (stickies-v) Vuylsteke (Brink Bitcoin Protocol Engineer)", tags:["security"],
+    note:"Bitcoin Core의 핵심 검증 로직을 라이브러리로 분리하는 프로젝트. 클라이언트 다양성을 가능하게 만드는 인프라 작업." },
+
+  { id:"d3-48", day:3, start:"14:00", end:"14:20", stage:"Nakamoto", star:0,
+    titleKo:"비트코인은 시간의 건축이다", titleEn:"Bitcoin as the Architecture of Time",
+    speakers:"Jeff Booth (Mod) · Jack Klucznik (The Bitcoin Lens) · Nicholas Marino (The Bitcoin Lens)", tags:["edu"],
+    note:"Booth + Bitcoin Lens 듀오. 비트코인을 '시간 측정 시스템'으로 보는 형이상학적 접근 — 블록 = 양자화된 시간 단위." },
+
+  { id:"d3-49", day:3, start:"14:00", end:"14:30", stage:"HRF Freedom Go Up", star:0,
+    titleKo:"비트코인의 분산화: 솔로 마이닝 운동", titleEn:"Decentralizing Bitcoin: The Solo Mining Movement",
+    speakers:"Tyler Stevens (Exergy) · WantClue (Bitaxe) · Ryan Kuester (256 Foundation) · Skot (Bitaxe)", tags:["mining"],
+    note:"d1-42의 후속편. 256 Foundation + Bitaxe + Exergy가 만드는 가정용 마이닝 분산화 운동의 종합 — 마이닝 = 시민의 권리." },
+
+  { id:"d3-50", day:3, start:"14:30", end:"15:00", stage:"Open Source", star:0,
+    titleKo:"안전하고 비밀스러운: 비트코인 프라이버시를 기본값으로", titleEn:"Secure & Secret: Advancing Bitcoin Privacy as the Default",
+    speakers:"Satsie (Mod) · Fabian Jahr (Brink) · Seth For Privacy (Cake Wallet) · Spacebear (Payjoin Foundation)",
+    tags:["security"],
+    note:"PayJoin·Silent Payments·Coinjoin의 기본값 통합 — Samourai 사후 프라이버시 진영의 재결집. '프라이버시는 옵션이 아니라 기본값'." },
+
+  { id:"d3-51", day:3, start:"14:30", end:"15:00", stage:"Enterprise (BFC)", star:0,
+    titleKo:"공개시장은 비트코인에 순기여인가?", titleEn:"Have Public Markets Been a Net Positive for Bitcoin?",
+    speakers:"Brian Dixon (Off the Chain, Mod) · Vijay Selvam (Principles of Bitcoin 저자) · Ryan Gentry (BIAC) · Andy Edstrom",
+    tags:["treasury"],
+    note:"BTCTC + ETF가 가져온 BTC 공개시장 진입 — 자본 유입 vs 사이퍼펑크 정신 약화의 trade-off 논쟁." },
+
+  { id:"d3-52", day:3, start:"14:30", end:"15:00", stage:"Genesis", star:0,
+    titleKo:"피아트 음악산업에서 탈출하기", titleEn:"Breaking Out of the Fiat Music Industry",
+    speakers:"OpenMike (Tunestr Founder) · Noa Gruman (Scardust Lead Singer)",
+    tags:["edu","hrf"],
+    note:"Value-for-Value 음악 — Spotify 우회 비트코인 직접 후원 모델. 창작자 경제의 비트코인화." },
+
+  { id:"d3-53", day:3, start:"14:30", end:"15:15", stage:"Workshop & 101", star:0,
+    titleKo:"워크숍: Bitcoinkernel 위에 빌드하기", titleEn:"Workshop: Building on Consensus with Bitcoinkernel",
+    speakers:"Stephan (stickies-v) Vuylsteke (Brink)", tags:["security"],
+    note:"클라이언트 개발자를 위한 핸즈온. 비트코인 합의 엔진 직접 활용." },
+
+  { id:"d3-54", day:3, start:"14:30", end:"15:00", stage:"Energy", star:0,
+    titleKo:"마이닝 서비스에서 봐야 할 핵심들", titleEn:"Key Things to Look for in Mining Services",
+    speakers:"Tatum Turn Up (Mod) · Rami Alsridi (Mining Grid) · Matt Weinberg (AtlasPool) · Dominik Wanzowitsch (Hashlabs)", tags:["mining"],
+    note:"호스티드 마이닝 서비스 선택 가이드 — 5%·8%·15% 마진의 차이, 전기료 투명성, SLA의 함정." },
+
+  { id:"d3-55", day:3, start:"14:30", end:"15:00", stage:"Deep VIP Lounge", star:0,
+    titleKo:"양자화된 시간: 비트코인 렌즈로 본 물리학 (VIP)", titleEn:"Quantized Time: Physics Through the Bitcoin Lens",
+    speakers:"Jeff Booth (Mod) · Jack Klucznik · Nicholas Marino", tags:["edu"],
+    note:"VIP 한정. d3-48의 VIP 심화. 비트코인을 양자물리학의 시간 측정 메타포로 확장 — 블록 = 시간의 양자." },
+
+  { id:"d3-56", day:3, start:"14:50", end:"15:20", stage:"Nakamoto", star:0,
+    titleKo:"에이전트 투자: AI가 인간보다 비트코인을 더 잘 투자할까?", titleEn:"Agentic Investing: Does AI Make Better Bitcoin Investors Than Humans?",
+    speakers:"Spencer Nichols (BMag, Mod) · Andrew McCormick (eToro US) · Milton Todd Ault III (OnlyBulls) · Alex Thorn (Galaxy)",
+    tags:["headliner"],
+    note:"AI 트레이딩 에이전트가 비트코인 시장에 진입하는 단계 — eToro·Galaxy의 입장. 휴먼 vs 에이전트 투자자의 미래." },
+
+  { id:"d3-57", day:3, start:"15:00", end:"15:30", stage:"Genesis", star:0,
+    titleKo:"항의 렌즈로 보는 비트코인 아트", titleEn:"Looking at Bitcoin Art Through a Protest Lens",
+    speakers:"Dennis Koch (BMAG, Mod) · Alex Schaefer · Kolin Burges · MEAR ONE", tags:["edu","hrf"],
+    note:"Bitcoin Magazine Art Gallery의 큐레이터. MEAR ONE은 LA 그래피티 아티스트. 비트코인 아트가 정치적 항의 표현 매개로 진화." },
+
+  { id:"d3-58", day:3, start:"15:00", end:"15:30", stage:"Energy", star:0,
+    titleKo:"버리지 말고: 좌초된 에너지를 마이닝 + HPC에 활용", titleEn:"Waste Not, Want Not: Using Stranded Energy for Mining + HPC",
+    speakers:"Jesse (BlocksBridge, Mod) · Hodl Tarantula (Sovereign Hybrid Compute) · Mathieu Agee (O21) · Joe Dillon (Adakon Energy)", tags:["mining"],
+    note:"플레어 가스·과잉 풍력·격리된 수력 — 좌초 에너지의 화폐화. 마이닝 + AI HPC가 어떻게 그리드 효율을 높이는가." },
+
+  { id:"d3-59", day:3, start:"15:00", end:"15:30", stage:"Open Source", star:0,
+    titleKo:"자가수탁 사용자 경험 향상시키기", titleEn:"Elevating the User Experience of Self-Custody",
+    speakers:"Alex Lewin (Fedi, Mod) · Kevin Loaec (Wizardsardine) · Pedro (BTC Conference) · Sindura Saraswathi (UCF PhD)", tags:["security"],
+    note:"멀티시그·하드웨어 지갑이 일반 사용자에게는 여전히 어려움 — UX 개선이 자가수탁 채택의 진짜 병목. d1-7과 페어링." },
+
+  { id:"d3-60", day:3, start:"15:00", end:"15:30", stage:"Enterprise (BFC)", star:0,
+    titleKo:"예측 시장의 인센티브와 환상", titleEn:"Incentives & Illusions in Prediction Markets",
+    speakers:"Matt Crosby (BMagazine Pro, Mod) · Paul Sztorc (LayerTwo Labs) · Micah Warren (오리건대) · Derek Orr (Predyx)",
+    tags:["lending"],
+    note:"Kalshi(d1-34) 후속 비판적 시각. Paul Sztorc는 Truthcoin/Drivechain 창시자 — 예측 시장의 게임이론적 한계." },
+
+  { id:"d3-61", day:3, start:"15:20", end:"15:50", stage:"Nakamoto", star:1,
+    titleKo:"모듈화 디자인: 모든 것을 비트코인 위에 빌드하기", titleEn:"Modular by Design: Building Everything on Bitcoin",
+    speakers:"Charlie Spears (Blockspace, Mod) · Dhruv Bansal (Unchained Co-founder) · David Marcus (Lightspark CEO) · Matt Luongo (Thesis CEO)",
+    tags:["headliner","security"],
+    note:"비트코인 위에 ID·결제·신용·SNS·계산이 다 빌드되는 'BTC Stack' 비전. 인터넷의 TCP/IP 역할을 비트코인이 한다는 명제." },
+
+  { id:"d3-62", day:3, start:"15:30", end:"16:00", stage:"Genesis", star:0,
+    titleKo:"실전 OPSEC: 비트코인 vs 감시 국가", titleEn:"OPSEC in Practice: Bitcoin vs. the Surveillance State",
+    speakers:"Ben QnA (Foundation, Mod) · Naomi Brockwell (Ludlow Institute) · Seth For Privacy (Cake Wallet) · OpnState",
+    tags:["security","hrf"],
+    note:"개인 OPSEC(작전 보안)의 실무 — 메타데이터 누출, 거래 분석, 합법적 프라이버시 보호. Naomi Brockwell은 프라이버시 활동가." },
+
+  { id:"d3-63", day:3, start:"15:30", end:"16:00", stage:"Energy", star:0,
+    titleKo:"히팅 기업가: 폐열의 상품화", titleEn:"Heating Entrepreneurs: Productizing Waste Heat",
+    speakers:"Tyler Stevens (Exergy, Mod) · Jason Goodman (Bathhouse) · Colin Sullivan (MintGreen) · Joseph Ma (Superheat)",
+    tags:["mining"],
+    note:"마이닝 폐열 → 가정난방·온수 공급 사업화. Bathhouse(NYC 사우나)가 마이너 폐열로 운영. 마이너 = 분산 난방 인프라의 새 정의." },
+
+  { id:"d3-64", day:3, start:"15:30", end:"16:00", stage:"Enterprise (BFC)", star:0,
+    titleKo:"비트코인 회사 상장 준비하기", titleEn:"Preparing to Take a Bitcoin Company Public",
+    speakers:"Anne Peetz (Reed Smith, Mod) · David Lange (Weaver) · Jonathan Kirkwood · Jody Mettler (BitGo Trust COO)",
+    tags:["treasury"],
+    note:"비트코인 회사의 IPO·SPAC·역합병 가이드. Nakamoto Inc(KindlyMD 역합병) 같은 사례의 일반화 — 글로벌 BTCTC가 공개시장 진입의 표준 절차를 정립하는 단계." },
+
+  { id:"d3-65", day:3, start:"15:30", end:"16:00", stage:"Open Source", star:0,
+    titleKo:"지갑 업그레이드: 지금부터 2140년까지", titleEn:"Upgrading Wallets for Users from Now to 2140",
+    speakers:"Hodl Dee (Coinkite, Mod) · Bastien Taquet (Satochip) · Ben Kaufman · Roy Sheinfeld (Breez CEO)", tags:["security"],
+    note:"비트코인 채굴이 끝나는 2140년까지 지갑 표준이 어떻게 진화해야 하는가의 장기 로드맵. 100년+ 시간 지평의 인프라 사고." },
+
+  { id:"d3-66", day:3, start:"15:50", end:"16:20", stage:"Nakamoto", star:2,
+    titleKo:"키노트: Jack Mallers", titleEn:"Keynote: Jack Mallers",
+    speakers:"Jack Mallers (Strike CEO/Founder, Twenty One CEO/Co-Founder)", tags:["headliner","lending","treasury"],
+    note:"Bitcoin 2026의 클로징 키노트 중 하나. Jack Mallers는 라이언이 컨퍼런스의 핵심 미팅 타깃으로 삼은 인물 — Strike(BTC 결제) + Twenty One(공모 BTCTC, Tether/SoftBank/Cantor 후원)의 양사 CEO. 라이언의 'Korea & Bitcoin' 보고서가 이 키노트 직후 또는 직전에 전달되어야 가장 효과적인 시점." },
+
+  { id:"d3-67", day:3, start:"16:00", end:"16:15", stage:"Open Source", star:0,
+    titleKo:"비트코인 PIPE v2: 비트코인 위의 약속과 ZKP", titleEn:"Bitcoin PIPEs v2: Covenants and ZKPs on Bitcoin via Witness Encryption",
+    speakers:"Misha Komarov ([[alloc] init] Founder)", tags:["security"],
+    note:"비트코인 코어에 Covenants(특정 조건의 출금 제약)를 도입할 수 있는가의 기술 시도. ZK + 위트니스 암호화 결합." },
+
+  { id:"d3-68", day:3, start:"16:00", end:"16:30", stage:"Genesis", star:0,
+    titleKo:"AI + 비트코인 + Nostr = 자유 기술 스택", titleEn:"AI + Bitcoin + Nostr = Freedom Tech Stack",
+    speakers:"Justin Moon (HRF, Mod) · Mark Suman (Maple AI) · Jesse Posner (Vora) · Derek Ross (Soapbox)",
+    tags:["hrf","korean","security"],
+    note:"AI 추론 + 비트코인 결제 + Nostr 신원의 결합 — '검열 저항형 AI 서비스'의 청사진. 빅테크에 의존하지 않는 차세대 디지털 인프라." },
+
+  { id:"d3-69", day:3, start:"16:00", end:"16:30", stage:"Enterprise (BFC)", star:1,
+    titleKo:"자가수탁 보험: 비트코인을 포기하지 않고 지키기", titleEn:"Self-Custody Insurance: Protecting Your Bitcoin Without Giving It Up",
+    speakers:"Aaron Daniel (Resolvr, Mod) · Chris Seedor (bitsurance/SEEDOR) · Kevin Loaec (Wizardsardine) · Rob Hamilton (AnchorWatch CEO)",
+    tags:["security","lending"],
+    note:"AnchorWatch는 첫 BTC 자가수탁 보험. 'self-custody = 모든 위험 내가 부담' 등식을 깨는 새 카테고리 — 신탁(d3-17)·보험·상속의 통합 패키지가 라이언의 OriginX 포지셔닝과 정확히 겹친다." },
+
+  { id:"d3-70", day:3, start:"16:00", end:"16:30", stage:"Energy", star:0,
+    titleKo:"로터리 마이닝과 풀 경제학 비교", titleEn:"Comparing Lottery Mining & Pool Economics for Hashers",
+    speakers:"Charlie Spears (Blockspace, Mod) · Jan Warmus (EMCD) · Duncan Coombe (Solo Mining Co)", tags:["mining"],
+    note:"Solo 마이닝 vs FPPS 풀의 분산성·수익률 비교. Bitaxe 시민 마이너의 로터리 당첨 사례 분석." },
+
+  { id:"d3-71", day:3, start:"16:15", end:"17:00", stage:"Open Source", star:1,
+    titleKo:"포스트 양자 소프트포크 계획은?", titleEn:"What's the Plan for a Post-Quantum Soft-Fork?",
+    speakers:"Aaron van Wirdum (BMag, Mod) · Jonathan Bier (Farside) · Mike Casey · Christian Papathanasiou (qBTC) · Ian Smith (Surmount)",
+    tags:["headliner","security"],
+    note:"비트코인 코어에 양자 저항 서명 체계를 어떻게 도입할 것인가의 실제 BIP 로드맵. 2030년대 비트코인의 가장 중요한 업그레이드 — 거버넌스 + 기술 + 마이그레이션 과제." },
+
+  { id:"d3-72", day:3, start:"16:20", end:"16:40", stage:"Nakamoto", star:0,
+    titleKo:"Afroman 공연", titleEn:"Afroman Performance",
+    speakers:"Afroman (Artist)", tags:["edu"],
+    note:"'Because I Got High' 래퍼 Afroman의 공연. 오하이오 보안관 가택수색 후 자유언론 아이콘이 된 인물 — 비트코인의 문화적 외연 확장." },
+
+  { id:"d3-73", day:3, start:"16:30", end:"17:00", stage:"Genesis", star:0,
+    titleKo:"돈을 고치고, 음식을 고치고, 세계를 고치자", titleEn:"Fix the Money, Fix the Food, Fix the World",
+    speakers:"Tom Taber (Beef Initiative, Mod) · Eric Thompson · Adam Saunders · Tony Beck (Beck & Bulow)", tags:["edu"],
+    note:"비트코인 + 재생 농업 + 로컬 식품 — '망가진 화폐가 망가진 음식을 만든다'는 Saifedean Ammous 식 농업철학." },
+
+  { id:"d3-74", day:3, start:"16:30", end:"17:00", stage:"Enterprise (BFC)", star:0,
+    titleKo:"비트코인 슈퍼사이클인가, 4년 패턴은 여전한가?", titleEn:"Is This the Bitcoin Supercycle or Is the Four-Year Pattern Still Intact?",
+    speakers:"Michael Terpin (Mod) · Matt Crosby (BMag Pro) · Rational Root · Shyan Hussain (BlockBytes Capital)",
+    tags:["headliner"],
+    note:"반감기 사이클 vs 슈퍼사이클 논쟁 — ETF·BTCTC가 들어온 시대에도 4년 사이클이 유효한가." },
+
+  { id:"d3-75", day:3, start:"16:30", end:"17:00", stage:"Energy", star:0,
+    titleKo:"리그의 제왕: 마이닝 하드웨어의 미래", titleEn:"Lord of the Rigs: The Future of Mining Hardware",
+    speakers:"Mitchell Askew (Blockware, Mod) · Max Guise (Bitkey/Proto) · Wright Wang (MicroBT) · Peng Li (Bitdeer) · Rezwan Mirza (BGIN)",
+    tags:["mining","asia"],
+    note:"MicroBT(중국 2위 ASIC 제조사) + Bitdeer + Block의 Proto. ASIC 제조 산업의 다음 5년 — 미·중 갈등 속 공급망 재편." },
+
+  { id:"d3-76", day:3, start:"16:40", end:"17:00", stage:"Nakamoto", star:0,
+    titleKo:"사토시 스피드웨이 토너먼트 결승", titleEn:"Satoshi Speedway Tournament Finals",
+    speakers:"D++ (Entropy) · Brianna Honkawa d'Estries (Evento)", tags:["edu"],
+    note:"Mario Kart 64에서 비트코인 라이트닝 직접 결제 — 게임화된 BTC 학습. 비트코인 문화의 놀이성." },
+
+  { id:"d3-77", day:3, start:"17:00", end:"17:30", stage:"Genesis", star:0,
+    titleKo:"비트코인 장수 플레이북: 건강, 강함, 활력", titleEn:"The Bitcoin Longevity Playbook: Health, Strength, & Vitality",
+    speakers:"Brian De Mint (Club Orange CMO, Mod) · Chef Pete Evans · Erin Crawford · Kellie Okonek", tags:["edu"],
+    note:"비트코이너 라이프스타일 — 카니보어 식단·웨이트 트레이닝·24시간 단식. '저시간 선호 = 장수 투자'의 메타포." },
+
+  { id:"d3-78", day:3, start:"17:00", end:"17:30", stage:"Enterprise (BFC)", star:0,
+    titleKo:"VC는 망가졌다 — 비트코인이 리셋이다", titleEn:"Why Venture Capital is Broken & How Bitcoin is the Reset",
+    speakers:"Lynne Bairstow (Mod) · Greg Carson (Humla Ventures) · Christopher Calicott (Trammell Venture) · Eric Yakes (Epoch Ventures) · Alex von Frankenberg (May Ventures)",
+    tags:["lending","treasury"],
+    note:"전통 VC의 LP 자본 비효율 vs Bitcoin-only VC의 새 모델. Trammell·Humla·Epoch가 만드는 'BTC 본위 벤처 펀드'의 표준." },
+
+  { id:"d3-79", day:3, start:"17:00", end:"17:30", stage:"Nakamoto", star:0,
+    titleKo:"에이전트 세계에서 비트코인은 어떻게 보이나?", titleEn:"What Does Bitcoin Look Like in an Agentic World?",
+    speakers:"Marty Bent (TFTC/Ten31, Mod) · Mark Moss · Erik Cason (Vora) · Bootoshi (Axia)",
+    tags:["edu"],
+    note:"Day 3 클로징 패널 중 하나. AI 에이전트가 일상 결제·계약 주체가 될 때 비트코인의 역할 — d1-33·d2-37의 결론적 회고." },
+
+  { id:"d3-80", day:3, start:"17:00", end:"17:30", stage:"Open Source", star:0,
+    titleKo:"커버넌트는 죽었고, 양자는 가짜고, BIP110은 vibe 코딩이었다", titleEn:"Covenants Are Dead, Quantum is Fake & BIP110 Was Vibe-Coded",
+    speakers:"Chris Seedor (SEEDOR, Mod) · Stu (Char) · Vortex (Vortex) · James O'Beirne",
+    tags:["security"],
+    note:"도발적 제목의 토론 — Bitcoin 2026 OSS 진영의 마지막 농담 같은 진지한 세션. 가장 핫한 기술 논쟁들의 회고." },
+];
+
+function tMin(t) { const [h,m] = t.split(":").map(Number); return h*60+m; }
+function fmtDur(s,e) { return `${tMin(e)-tMin(s)}분`; }
+
+async function saveSelections(ids) { try { if (window.storage?.set) await window.storage.set("btc2026:selected", JSON.stringify(ids)); } catch(e){} }
+async function loadSelections() { try { if (window.storage?.get) { const r = await window.storage.get("btc2026:selected"); if (r?.value) return JSON.parse(r.value); } } catch(e){} return []; }
+
+// ─── 라스베가스 시간 (PST/PDT, UTC-7 in April) → UTC 변환 ─────────
+// 4/27~29는 PDT(UTC-7). Day 1 = 4/27, Day 2 = 4/28, Day 3 = 4/29.
+function sessionToUTC(s) {
+  const day = 26 + s.day; // 1→27, 2→28, 3→29
+  const [sh, sm] = s.start.split(":").map(Number);
+  const [eh, em] = s.end.split(":").map(Number);
+  // PDT (UTC-7): 라스베가스 시간 + 7시간 = UTC
+  const startUTC = new Date(Date.UTC(2026, 3, day, sh + 7, sm, 0));
+  const endUTC   = new Date(Date.UTC(2026, 3, day, eh + 7, em, 0));
+  return { startUTC, endUTC };
+}
+function fmtICSDate(d) {
+  // YYYYMMDDTHHMMSSZ
+  const p = n => String(n).padStart(2, "0");
+  return `${d.getUTCFullYear()}${p(d.getUTCMonth()+1)}${p(d.getUTCDate())}T${p(d.getUTCHours())}${p(d.getUTCMinutes())}00Z`;
+}
+function fmtGCalDate(d) { return fmtICSDate(d); } // 동일 형식
+function escICS(text) { return String(text||"").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;"); }
+
+// ICS 파일 텍스트 생성 (10분 전 알람 포함)
+function buildICS(items) {
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Bitcoin 2026 LV//OriginX Dashboard//KO",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH",
+    "X-WR-CALNAME:Bitcoin 2026 Las Vegas",
+    "X-WR-TIMEZONE:America/Los_Angeles",
+  ];
+  const stamp = fmtICSDate(new Date());
+  items.forEach(s => {
+    const { startUTC, endUTC } = sessionToUTC(s);
+    const star = s.star ? "⭐".repeat(s.star) + " " : "";
+    const summary = `${star}${s.titleKo}`;
+    const desc = [
+      s.titleEn ? `[EN] ${s.titleEn}` : "",
+      `Speakers: ${s.speakers}`,
+      s.note ? `\\n${s.note}` : "",
+    ].filter(Boolean).join("\\n");
+    lines.push(
+      "BEGIN:VEVENT",
+      `UID:${s.id}@btc2026-originx`,
+      `DTSTAMP:${stamp}`,
+      `DTSTART:${fmtICSDate(startUTC)}`,
+      `DTEND:${fmtICSDate(endUTC)}`,
+      `SUMMARY:${escICS(summary)}`,
+      `LOCATION:${escICS(s.stage + ", The Venetian, Las Vegas")}`,
+      `DESCRIPTION:${escICS(desc)}`,
+      // 10분 전 알람
+      "BEGIN:VALARM",
+      "ACTION:DISPLAY",
+      `DESCRIPTION:${escICS(s.titleKo)}`,
+      "TRIGGER:-PT10M",
+      "END:VALARM",
+      "END:VEVENT",
+    );
+  });
+  lines.push("END:VCALENDAR");
+  return lines.join("\r\n");
+}
+
+// 단일 세션 → Google Calendar 추가 URL
+function googleCalUrl(s) {
+  const { startUTC, endUTC } = sessionToUTC(s);
+  const star = s.star ? "⭐".repeat(s.star) + " " : "";
+  const text = `${star}${s.titleKo}`;
+  const details = [
+    s.titleEn ? `[EN] ${s.titleEn}` : "",
+    `Speakers: ${s.speakers}`,
+    s.note ? `\n\n${s.note}` : "",
+  ].filter(Boolean).join("\n");
+  const params = new URLSearchParams({
+    action: "TEMPLATE",
+    text,
+    dates: `${fmtGCalDate(startUTC)}/${fmtGCalDate(endUTC)}`,
+    details,
+    location: `${s.stage}, The Venetian, Las Vegas`,
+    ctz: "America/Los_Angeles",
+  });
+  return `https://calendar.google.com/calendar/render?${params.toString()}`;
+}
+
+// ICS 파일 다운로드
+function downloadICS(items, filename = "bitcoin2026.ics") {
+  const text = buildICS(items);
+  const blob = new Blob([text], { type: "text/calendar;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+// 선택 ID들을 URL 해시에 인코딩 (팀원 공유용)
+function buildShareUrl(ids) {
+  const base = location.origin + location.pathname;
+  return `${base}#sel=${encodeURIComponent(ids.join(","))}`;
+}
+function readSelFromUrl() {
+  const m = location.hash.match(/sel=([^&]+)/);
+  if (!m) return null;
+  try { return decodeURIComponent(m[1]).split(",").filter(Boolean); }
+  catch (e) { return null; }
+}
+
+// 이미지 캡처 (html2canvas)
+async function captureToBlob(domNode) {
+  if (!window.html2canvas) throw new Error("html2canvas not loaded");
+  const canvas = await window.html2canvas(domNode, {
+    backgroundColor: "#0a0a0a",
+    scale: 2, // retina 품질
+    useCORS: true,
+    logging: false,
+  });
+  return new Promise(resolve => canvas.toBlob(resolve, "image/png"));
+}
+
+// 이미지 다운로드
+async function downloadImage(domNode, filename = "bitcoin2026-itinerary.png") {
+  const blob = await captureToBlob(domNode);
+  if (!blob) return false;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+  return true;
+}
+
+// Web Share API (모바일 네이티브 공유 시트)
+async function shareItinerary({ items, imageBlob, shareUrl }) {
+  const text = items.map(s => `${s.start}–${s.end} | ${s.titleKo} (${s.stage})`).join("\n");
+  const fullText = `🟧 Bitcoin 2026 Las Vegas — 내 일정 (${items.length}개 세션)\n\n${text}\n\n링크: ${shareUrl}`;
+  if (navigator.share) {
+    const data = { title: "Bitcoin 2026 LV — 내 일정", text: fullText, url: shareUrl };
+    if (imageBlob && navigator.canShare?.({ files: [new File([imageBlob], "schedule.png", { type:"image/png" })] })) {
+      data.files = [new File([imageBlob], "schedule.png", { type:"image/png" })];
+    }
+    try { await navigator.share(data); return true; } catch(e) { /* user cancelled */ return false; }
+  }
+  // fallback: clipboard
+  try { await navigator.clipboard.writeText(fullText); return "clipboard"; } catch(e) { return false; }
+}
+
+function StarBadge({ level }) {
+  if (!level) return null;
+  return (
+    <span className={`inline-flex items-center ${level === 2 ? "text-orange-400" : "text-amber-400"} text-xs font-bold flex-shrink-0`} title={level === 2 ? "분수령급 담론" : "주요 담론"}>
+      {"⭐".repeat(level)}
+    </span>
+  );
+}
+
+function Tag({ id }) {
+  const t = TAGS[id]; if (!t) return null;
+  return <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium border ${t.color}`}><span>{t.emoji}</span>{t.label}</span>;
+}
+
+function SessionCard({ s, checked, onToggle }) {
+  const stg = STAGES[s.stage] || { color: "#666", short: s.stage };
+  const starClass = s.star === 2 ? "star-card-2" : "";
+  return (
+    <label className={`block bg-zinc-900/60 ${starClass} border rounded-xl p-3 transition-all cursor-pointer ${checked ? "border-orange-500/60 glow" : s.star >= 1 ? "border-zinc-700/80 hover:border-zinc-600" : "border-zinc-800 hover:border-zinc-700"}`}>
+      <div className="flex gap-3">
+        <input type="checkbox" className="chk mt-1" checked={checked} onChange={() => onToggle(s.id)} />
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap mb-1">
+            <span className="text-xs font-mono text-zinc-400">{s.start}–{s.end}</span>
+            <span className="text-[10px] text-zinc-500">·</span>
+            <span className="text-[10px] text-zinc-500">{fmtDur(s.start,s.end)}</span>
+            <span className="text-[10px] px-1.5 py-0.5 rounded font-medium" style={{background:`${stg.color}22`, color: stg.color, border:`1px solid ${stg.color}55`}}>{stg.short}</span>
+          </div>
+          <div className="flex items-start gap-1.5 mb-0.5">
+            <StarBadge level={s.star} />
+            <h3 className="text-sm font-semibold text-zinc-100 leading-snug">{s.titleKo}</h3>
+          </div>
+          <p className="text-[10px] text-zinc-600 mb-1.5 truncate italic">{s.titleEn}</p>
+          <p className="text-xs text-zinc-400 leading-relaxed mb-2">{s.speakers}</p>
+          <div className="flex flex-wrap gap-1 mb-2">
+            {(s.tags||[]).map(t => <Tag key={t} id={t} />)}
+          </div>
+          {s.note && (
+            <p className="text-[11px] text-zinc-300/90 bg-zinc-950/60 border-l-2 border-zinc-700 pl-2.5 py-1.5 leading-relaxed">
+              {s.note}
+            </p>
+          )}
+        </div>
+      </div>
+    </label>
+  );
+}
+
+function ItineraryModal({ items, onClose }) {
+  const sorted = [...items].sort((a,b) => tMin(a.start)-tMin(b.start) || tMin(a.end)-tMin(b.end));
+  const captureRef = React.useRef(null);
+  const [busy, setBusy] = useState(null); // null | "image" | "share" | "ics"
+  const [toast, setToast] = useState(null);
+
+  function flash(msg) { setToast(msg); setTimeout(() => setToast(null), 2400); }
+
+  const rows = [];
+  for (let i=0; i<sorted.length; i++) {
+    const cur = sorted[i];
+    rows.push({ type:"session", s: cur });
+    if (i < sorted.length-1) {
+      const nxt = sorted[i+1];
+      const gap = tMin(nxt.start) - tMin(cur.end);
+      const walk = walkMin(cur.stage, nxt.stage);
+      let kind = "ok";
+      if (gap < 0) kind = "conflict";
+      else if (gap < walk) kind = "tight";
+      else if (gap > 30) kind = "wait";
+      rows.push({ type:"transit", from: cur, to: nxt, gap, walk, kind });
+    }
+  }
+
+  // ─── 액션 핸들러 ────────────────────────────────────────────
+  async function onSaveImage() {
+    if (!captureRef.current || sorted.length === 0) return;
+    setBusy("image");
+    try {
+      const ok = await downloadImage(captureRef.current, `bitcoin2026-day${sorted[0]?.day || 1}.png`);
+      if (ok) flash("✅ 이미지 저장됨 (다운로드 폴더 확인)");
+      else flash("⚠️ 이미지 저장 실패");
+    } catch (e) { console.error(e); flash("⚠️ 이미지 저장 실패"); }
+    setBusy(null);
+  }
+
+  async function onShareNative() {
+    if (sorted.length === 0) return;
+    setBusy("share");
+    try {
+      const blob = captureRef.current ? await captureToBlob(captureRef.current).catch(()=>null) : null;
+      const shareUrl = buildShareUrl(sorted.map(s => s.id));
+      const r = await shareItinerary({ items: sorted, imageBlob: blob, shareUrl });
+      if (r === true) flash("✅ 공유 완료");
+      else if (r === "clipboard") flash("📋 클립보드에 복사됨 (공유 시트 미지원 브라우저)");
+    } catch (e) { console.error(e); }
+    setBusy(null);
+  }
+
+  function onCopyLink() {
+    const url = buildShareUrl(sorted.map(s => s.id));
+    navigator.clipboard?.writeText(url);
+    flash("🔗 링크 복사됨 — 팀원에게 보내면 동일 일정으로 열림");
+  }
+
+  function onDownloadICS() {
+    if (sorted.length === 0) return;
+    setBusy("ics");
+    try {
+      downloadICS(sorted, `bitcoin2026-day${sorted[0]?.day || 1}.ics`);
+      flash("📲 .ics 다운로드 완료 — iPhone에서 파일 열면 캘린더에 자동 추가 (10분 전 알람 포함)");
+    } catch (e) { console.error(e); flash("⚠️ 다운로드 실패"); }
+    setBusy(null);
+  }
+
+  function onAddToGoogle() {
+    if (sorted.length === 0) return;
+    if (sorted.length > 5) {
+      const ok = confirm(`${sorted.length}개 세션을 각각 새 탭으로 열어 Google Calendar에 추가합니다. 계속하시겠습니까?\n\n(팝업 차단 해제 필요. 많을 경우 .ics 다운로드를 권장합니다.)`);
+      if (!ok) return;
+    }
+    sorted.forEach((s, idx) => {
+      // 팝업 차단 회피용 약간의 시차
+      setTimeout(() => window.open(googleCalUrl(s), "_blank"), idx * 200);
+    });
+    flash(`📅 ${sorted.length}개 탭이 열림 — 각 탭에서 '저장' 클릭`);
+  }
+
+  function onCopyText() {
+    const txt = sorted.map(s => `${s.start}–${s.end} | ${s.stage}\n${s.star?"⭐".repeat(s.star)+" ":""}${s.titleKo}\n${s.speakers}`).join("\n\n");
+    navigator.clipboard?.writeText(txt);
+    flash("📋 텍스트 복사 완료");
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[92vh] flex flex-col slide-up" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-zinc-800 sticky top-0 bg-zinc-950 z-10">
+          <div>
+            <h2 className="text-lg font-bold text-orange-400">내 동선 일정</h2>
+            <p className="text-xs text-zinc-500">{sorted.length}개 세션 · 시간순 + 이동시간 계산됨</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-400 hover:text-white p-2 -m-2 text-2xl leading-none">×</button>
+        </div>
+
+        <div className="overflow-y-auto">
+          {/* 캡처용 컨테이너 — 이미지 출력 시 이 영역만 캡처 */}
+          <div ref={captureRef} className="p-4 space-y-2 bg-zinc-950">
+            {/* 캡처 시 보일 헤더 */}
+            <div className="mb-3 pb-3 border-b border-zinc-800">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-base font-bold text-orange-400">🟧 Bitcoin 2026 Las Vegas</h3>
+                  <p className="text-[10px] text-zinc-500">The Venetian · April 27–29, 2026</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-zinc-600">총 {sorted.length}개 세션</p>
+                  <p className="text-[9px] text-zinc-700">⭐⭐ 핵심 담론 / ⭐ 주요 담론</p>
+                </div>
+              </div>
+            </div>
+
+            {sorted.length === 0 && (
+              <div className="text-center py-12 text-zinc-500">
+                <p>선택된 세션이 없습니다.</p>
+                <p className="text-xs mt-2">메인 화면에서 들을 세션을 체크해주세요.</p>
+              </div>
+            )}
+            {rows.map((row, idx) => {
+              if (row.type === "session") {
+                const stg = STAGES[row.s.stage] || { color:"#666" };
+                return (
+                  <div key={idx} className="bg-zinc-900/80 border border-zinc-800 rounded-xl p-3 relative overflow-hidden">
+                    <div className="absolute left-0 top-0 bottom-0 w-1" style={{background:stg.color}}/>
+                    <div className="pl-2">
+                      <div className="flex items-center gap-2 mb-1 text-xs font-mono text-zinc-300">
+                        <span className="text-orange-400 font-bold">{row.s.start}</span>
+                        <span className="text-zinc-600">–</span>
+                        <span>{row.s.end}</span>
+                        <StarBadge level={row.s.star} />
+                      </div>
+                      <h4 className="text-sm font-semibold text-white mb-1">{row.s.titleKo}</h4>
+                      <div className="flex items-center gap-2 text-xs text-zinc-400">
+                        <span className="font-medium" style={{color: stg.color}}>📍 {row.s.stage}</span>
+                      </div>
+                      <p className="text-[11px] text-zinc-500 mt-1">{row.s.speakers}</p>
+                    </div>
+                  </div>
+                );
+              }
+              const colorMap = {
+                conflict: { bg:"bg-red-500/10",   border:"border-red-500/40",    text:"text-red-300",    icon:"⚠️", title:"시간 충돌" },
+                tight:    { bg:"bg-amber-500/10", border:"border-amber-500/40",  text:"text-amber-300",  icon:"⏱️", title:"빠듯함" },
+                ok:       { bg:"bg-zinc-800/40",  border:"border-zinc-700/50",   text:"text-zinc-400",   icon:"🚶", title:"이동" },
+                wait:     { bg:"bg-blue-500/10",  border:"border-blue-500/30",   text:"text-blue-300",   icon:"☕", title:"여유" },
+              };
+              const c = colorMap[row.kind];
+              return (
+                <div key={idx} className={`${c.bg} border ${c.border} rounded-lg px-3 py-2 ml-4 text-xs flex items-start gap-2`}>
+                  <span className="text-base">{c.icon}</span>
+                  <div className={`${c.text} flex-1`}>
+                    <div className="font-semibold mb-0.5">{c.title}</div>
+                    <div className="text-[11px] opacity-90">
+                      {row.kind === "conflict" && (<>다음 세션이 <b>{Math.abs(row.gap)}분 일찍</b> 시작 — 한쪽 포기 필요. 도보 {row.walk}분.</>)}
+                      {row.kind === "tight" && (<>휴식 {row.gap}분 / 도보 {row.walk}분 — <b>지각 위험.</b> 세션 끝까지 듣지 말고 미리 이동.</>)}
+                      {row.kind === "ok" && (<>휴식 {row.gap}분 / 도보 {row.walk}분 ({row.from.stage.split(" ")[0]} → {row.to.stage.split(" ")[0]})</>)}
+                      {row.kind === "wait" && (<>{row.gap}분 여유 / 도보 {row.walk}분 — 네트워킹·식사·EXPO 부스 둘러보기 가능</>)}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* 토스트 */}
+        {toast && (
+          <div className="absolute bottom-32 left-1/2 -translate-x-1/2 bg-zinc-800 text-zinc-100 text-xs px-4 py-2 rounded-full border border-zinc-700 shadow-xl z-30 max-w-[90%] text-center">
+            {toast}
+          </div>
+        )}
+
+        {/* 공유/내보내기 액션 영역 */}
+        {sorted.length > 0 && (
+          <div className="border-t border-zinc-800 p-3 safe-bottom space-y-2">
+            {/* 1행: 공유 (이미지/네이티브/링크) */}
+            <div className="grid grid-cols-3 gap-2">
+              <button onClick={onSaveImage} disabled={busy==="image"}
+                className="py-2.5 bg-orange-500 hover:bg-orange-400 disabled:bg-zinc-800 text-black disabled:text-zinc-600 rounded-lg text-xs font-bold transition flex flex-col items-center gap-0.5">
+                <span className="text-base">{busy==="image" ? "⏳" : "🖼️"}</span>
+                <span>이미지 저장</span>
+              </button>
+              <button onClick={onShareNative} disabled={busy==="share"}
+                className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-lg text-xs font-bold transition flex flex-col items-center gap-0.5">
+                <span className="text-base">{busy==="share" ? "⏳" : "📤"}</span>
+                <span>공유하기</span>
+              </button>
+              <button onClick={onCopyLink}
+                className="py-2.5 bg-zinc-800 hover:bg-zinc-700 text-zinc-100 rounded-lg text-xs font-bold transition flex flex-col items-center gap-0.5">
+                <span className="text-base">🔗</span>
+                <span>링크 복사</span>
+              </button>
+            </div>
+
+            {/* 2행: 캘린더 추가 */}
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={onAddToGoogle}
+                className="py-2.5 bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-200 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5">
+                <span>📅</span><span>구글 캘린더</span>
+              </button>
+              <button onClick={onDownloadICS} disabled={busy==="ics"}
+                className="py-2.5 bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-zinc-100 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5">
+                <span>📱</span><span>아이폰 일정 등록하기</span>
+              </button>
+            </div>
+
+            {/* 3행: 텍스트 (보조) */}
+            <button onClick={onCopyText}
+              className="w-full py-2 bg-transparent hover:bg-zinc-900 text-zinc-500 hover:text-zinc-300 rounded-lg text-[11px] transition">
+              📋 텍스트로만 복사 (카톡/슬랙 메시지용)
+            </button>
+
+            <p className="text-[10px] text-zinc-600 text-center leading-relaxed pt-1">
+              💡 .ics 파일은 각 세션 <b>10분 전 알람</b> 포함 · 시간대는 라스베가스(PDT) 기준
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function FloorPlanModal({ onClose }) {
+  return (
+    <div className="fixed inset-0 bg-black/80 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 backdrop-blur-sm" onClick={onClose}>
+      <div className="bg-zinc-950 border border-zinc-800 rounded-t-2xl sm:rounded-2xl w-full sm:max-w-2xl max-h-[92vh] flex flex-col slide-up" onClick={e=>e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-zinc-800">
+          <div>
+            <h2 className="text-lg font-bold text-orange-400">스테이지 위치</h2>
+            <p className="text-xs text-zinc-500">The Venetian · 색상 = 카드의 스테이지 컬러</p>
+          </div>
+          <button onClick={onClose} className="text-zinc-400 hover:text-white p-2 -m-2 text-2xl leading-none">×</button>
+        </div>
+        <div className="overflow-y-auto p-4">
+          <svg viewBox="0 0 400 320" className="w-full h-auto bg-zinc-900 rounded-lg">
+            <rect x="40" y="40" width="200" height="180" fill="#1a1a1a" stroke="#333" strokeWidth="1"/>
+            <text x="140" y="135" textAnchor="middle" fill="#444" fontSize="10" fontWeight="bold">EXPO HALL</text>
+            <rect x="260" y="180" width="120" height="100" fill="#1a1a1a" stroke="#333" strokeWidth="1"/>
+            <text x="320" y="240" textAnchor="middle" fill="#444" fontSize="9">Conference Rooms</text>
+            <rect x="100" y="50" width="120" height="55" fill="#3b82f6" rx="4"/>
+            <text x="160" y="82" textAnchor="middle" fill="white" fontSize="11" fontWeight="bold">Nakamoto</text>
+            <rect x="80" y="55" width="20" height="20" fill="#06b6d4" rx="2"/>
+            <rect x="45" y="125" width="55" height="40" fill="#a855f7" rx="3"/>
+            <text x="73" y="148" textAnchor="middle" fill="white" fontSize="9" fontWeight="bold">Genesis</text>
+            <rect x="50" y="170" width="40" height="22" fill="#84cc16" rx="2"/>
+            <text x="70" y="184" textAnchor="middle" fill="white" fontSize="7" fontWeight="bold">Satoshi</text>
+            <rect x="135" y="160" width="50" height="35" fill="#f59e0b" rx="3"/>
+            <text x="160" y="180" textAnchor="middle" fill="white" fontSize="9" fontWeight="bold">Energy</text>
+            <rect x="115" y="180" width="20" height="18" fill="#ec4899" rx="2"/>
+            <text x="125" y="192" textAnchor="middle" fill="white" fontSize="6" fontWeight="bold">HRF</text>
+            <rect x="195" y="120" width="60" height="60" fill="#10b981" rx="4"/>
+            <text x="225" y="153" textAnchor="middle" fill="white" fontSize="10" fontWeight="bold">Enterprise</text>
+            <rect x="270" y="195" width="35" height="25" fill="#f97316" rx="2"/>
+            <text x="287" y="210" textAnchor="middle" fill="white" fontSize="7" fontWeight="bold">Workshop</text>
+            <rect x="310" y="195" width="35" height="25" fill="#ef4444" rx="2"/>
+            <text x="327" y="210" textAnchor="middle" fill="white" fontSize="7" fontWeight="bold">OpenSrc</text>
+            <rect x="270" y="120" width="80" height="40" fill="#6366f1" rx="3"/>
+            <text x="310" y="143" textAnchor="middle" fill="white" fontSize="9" fontWeight="bold">Deep VIP</text>
+            <text x="170" y="240" textAnchor="middle" fill="#666" fontSize="8">↑ Main Entrance</text>
+            <text x="320" y="300" textAnchor="middle" fill="#666" fontSize="8">↑ Level 2 Entrance</text>
+          </svg>
+          <div className="mt-4 grid grid-cols-2 gap-1.5 text-xs">
+            {Object.entries(STAGES).map(([k,v]) => (
+              <div key={k} className="flex items-center gap-2 p-1.5 rounded bg-zinc-900/50">
+                <div className="w-3 h-3 rounded flex-shrink-0" style={{background:v.color}}/>
+                <div className="min-w-0">
+                  <div className="font-semibold text-zinc-200 text-[11px] truncate">{k}</div>
+                  <div className="text-[9px] text-zinc-500 truncate">{v.loc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-4 p-3 bg-zinc-900/50 border border-zinc-800 rounded-lg">
+            <h3 className="text-xs font-bold text-orange-400 mb-1.5">📐 동선 거리 핵심</h3>
+            <ul className="text-[11px] text-zinc-400 space-y-0.5 leading-relaxed">
+              <li>• <b className="text-zinc-200">짧음 (1~3분):</b> Energy↔Enterprise, Energy↔HRF, Workshop↔OpenSrc</li>
+              <li>• <b className="text-zinc-200">중간 (4~6분):</b> Nakamoto↔Enterprise/Genesis/Energy</li>
+              <li>• <b className="text-zinc-200">긺 (7~9분):</b> Genesis↔Workshop/OpenSrc/DeepVIP (Expo 가로질러 Conference Rooms)</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function App() {
+  const [day, setDay] = useState(1);
+  const [view, setView] = useState("stage");
+  const [filter, setFilter] = useState(null);
+  const [starOnly, setStarOnly] = useState(false);
+  const [selected, setSelected] = useState(new Set());
+  const [showItin, setShowItin] = useState(false);
+  const [showFloor, setShowFloor] = useState(false);
+
+  useEffect(() => { (async () => {
+    // 1) URL에 공유 링크 파라미터가 있으면 우선 적용
+    const fromUrl = readSelFromUrl();
+    if (fromUrl && fromUrl.length > 0) {
+      setSelected(new Set(fromUrl));
+      saveSelections(fromUrl);
+      return;
+    }
+    // 2) 없으면 저장된 선택 불러옴
+    const ids = await loadSelections();
+    setSelected(new Set(ids));
+  })(); }, []);
+
+  const toggleSel = useCallback((id) => {
+    setSelected(prev => {
+      const n = new Set(prev);
+      if (n.has(id)) n.delete(id); else n.add(id);
+      saveSelections([...n]);
+      return n;
+    });
+  }, []);
+
+  const dayItems = useMemo(() => {
+    let items = SESSIONS.filter(s => s.day === day);
+    if (filter) items = items.filter(s => s.tags?.includes(filter));
+    if (starOnly) items = items.filter(s => (s.star||0) >= 1);
+    return items;
+  }, [day, filter, starOnly]);
+
+  const grouped = useMemo(() => {
+    if (view === "time") return [["all", [...dayItems].sort((a,b)=>tMin(a.start)-tMin(b.start))]];
+    const g = {};
+    dayItems.forEach(s => { (g[s.stage] = g[s.stage] || []).push(s); });
+    Object.values(g).forEach(arr => arr.sort((a,b)=>tMin(a.start)-tMin(b.start)));
+    return Object.keys(STAGES).filter(k => g[k]).map(k => [k, g[k]]);
+  }, [dayItems, view]);
+
+  const selectedItems = SESSIONS.filter(s => selected.has(s.id));
+  const selectedDay = selectedItems.filter(s => s.day === day);
+
+  return (
+    <div className="min-h-screen text-zinc-100 pb-32">
+      <header className="sticky top-0 z-30 bg-black/95 backdrop-blur border-b border-zinc-900">
+        <div className="max-w-3xl mx-auto px-4 py-3">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <h1 className="text-base font-bold text-orange-400 leading-tight">Bitcoin 2026 Las Vegas</h1>
+              <p className="text-[10px] text-zinc-500 -mt-0.5">담론 맥락 동선 대시보드 · ⭐ 핵심 담론</p>
+            </div>
+            <button onClick={()=>setShowFloor(true)} className="text-xs px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 rounded-lg text-zinc-300 hover:border-zinc-700">
+              🗺️ 플로어플랜
+            </button>
+          </div>
+          <div className="flex gap-1 mb-2">
+            {[1,2,3].map(d => (
+              <button key={d} onClick={()=>setDay(d)} className={`flex-1 py-2 rounded-lg text-xs font-bold transition ${day===d ? "bg-orange-500 text-black" : "bg-zinc-900 text-zinc-400 hover:bg-zinc-800"}`}>
+                Day {d}<br/><span className="text-[9px] font-normal opacity-70">{["Mon Apr 27","Tue Apr 28","Wed Apr 29"][d-1]}</span>
+              </button>
+            ))}
+          </div>
+          <div className="flex gap-2 items-center overflow-x-auto no-scrollbar">
+            <div className="flex bg-zinc-900 rounded-lg p-0.5 flex-shrink-0">
+              <button onClick={()=>setView("stage")} className={`px-2.5 py-1 text-[11px] rounded ${view==="stage" ? "bg-zinc-700 text-white" : "text-zinc-500"}`}>스테이지별</button>
+              <button onClick={()=>setView("time")} className={`px-2.5 py-1 text-[11px] rounded ${view==="time" ? "bg-zinc-700 text-white" : "text-zinc-500"}`}>시간순</button>
+            </div>
+            <button onClick={()=>setStarOnly(!starOnly)} className={`flex-shrink-0 px-2.5 py-1 text-[11px] rounded-full border whitespace-nowrap ${starOnly ? "bg-orange-500/20 border-orange-500/60 text-orange-300 font-semibold" : "bg-transparent border-zinc-800 text-zinc-400"}`}>
+              ⭐ 핵심만
+            </button>
+            <button onClick={()=>setFilter(null)} className={`flex-shrink-0 px-2.5 py-1 text-[11px] rounded-full border ${!filter ? "bg-orange-500 border-orange-500 text-black font-semibold" : "bg-transparent border-zinc-800 text-zinc-400"}`}>전체</button>
+            {Object.entries(TAGS).filter(([k])=>k!=="general").map(([k,t]) => (
+              <button key={k} onClick={()=>setFilter(filter===k ? null : k)} className={`flex-shrink-0 px-2.5 py-1 text-[11px] rounded-full border whitespace-nowrap ${filter===k ? `${t.color} font-semibold` : "bg-transparent border-zinc-800 text-zinc-500"}`}>
+                {t.emoji} {t.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </header>
+
+      <main className="max-w-3xl mx-auto px-4 pt-4 space-y-6">
+        {grouped.map(([key, items]) => (
+          <section key={key}>
+            {view === "stage" && key !== "all" && (
+              <div className="flex items-center gap-2 mb-2 sticky top-[140px] bg-black/95 backdrop-blur py-1.5 z-10">
+                <div className="w-1 h-5 rounded" style={{background: STAGES[key].color}}/>
+                <h2 className="text-sm font-bold" style={{color: STAGES[key].color}}>{key}</h2>
+                <span className="text-[10px] text-zinc-600">· {STAGES[key].loc}</span>
+                <span className="text-[10px] text-zinc-700 ml-auto">{items.length}개</span>
+              </div>
+            )}
+            <div className="space-y-2">
+              {items.map(s => <SessionCard key={s.id} s={s} checked={selected.has(s.id)} onToggle={toggleSel} />)}
+            </div>
+          </section>
+        ))}
+        {dayItems.length === 0 && (
+          <div className="text-center py-12 text-zinc-500 text-sm">필터에 해당하는 세션이 없습니다</div>
+        )}
+      </main>
+
+      <div className="fixed bottom-0 left-0 right-0 bg-black/95 backdrop-blur border-t border-zinc-900 safe-bottom z-20">
+        <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
+          <div className="flex-1 min-w-0">
+            <p className="text-xs text-zinc-500">선택됨</p>
+            <p className="text-base font-bold text-white">
+              <span className="text-orange-400">{selected.size}</span>
+              <span className="text-zinc-600 text-sm"> / {SESSIONS.length} 세션</span>
+              {selectedDay.length > 0 && <span className="text-xs text-zinc-500 ml-2">(Day {day}: {selectedDay.length})</span>}
+            </p>
+          </div>
+          <button onClick={() => setShowItin(true)} disabled={selected.size === 0}
+            className="px-4 py-2.5 bg-orange-500 disabled:bg-zinc-800 disabled:text-zinc-600 text-black font-bold text-sm rounded-xl transition active:scale-95">
+            내 일정 만들기 →
+          </button>
+        </div>
+      </div>
+
+      {showItin && <ItineraryModal items={selectedItems} onClose={()=>setShowItin(false)} />}
+      {showFloor && <FloorPlanModal onClose={()=>setShowFloor(false)} />}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
